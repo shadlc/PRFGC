@@ -1,7 +1,7 @@
 # python robot for go-cqhttp
 
 ## Description
-一个适用于Linux和Windows理论支持Mac，用于对接go-cqhttp进行处理的python程序
+一个适用于Linux和Windows理论支持Mac，用于对接[go-cqhttp](https://github.com/Mrs4s/go-cqhttp)进行处理的python程序
 
 ## Usage
 - 安装Python3.7或以上
