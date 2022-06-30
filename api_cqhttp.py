@@ -86,7 +86,7 @@ def get_msg(resp_dict):
 def send_group_notice(resp_dict):
 	group_id = resp_dict['group_id']  # 群号
 	content = resp_dict['content']  # 公告内容
-	url = '/_send_group_notice?group_id=' + str(group_id) + '&content' + content
+	url = '/_send_group_notice?group_id=' + str(group_id) + '&content=' + content
 	return get_request(url)
 
 def get_image(resp_dict):
