@@ -1,0 +1,4 @@
+openpyxl==3.0.9
+pillow==8.3.2
+requests==2.27.1
+urllib3==1.26.8
