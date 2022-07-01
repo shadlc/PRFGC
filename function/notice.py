@@ -79,8 +79,8 @@ class notice(object):
 		reply_id('group', self.group_id, msg)
 
 	def group_upload(self):
-		file_name = rev['file']['name']
-		file_size = calc_size(rev['file']['size'])
+		file_name = self.rev['file']['name']
+		file_size = calc_size(self.rev['file']['size'])
 		printf(f'{LYELLOW}[NOTICE]{RESET}群{LPURPLE}{self.group_name}({self.group_id}){RESET}内{LPURPLE}{self.user_name}({self.user_id}){RESET}上传了文件{LYELLOW}{file_name}({file_size})')
 
 	def group_admin(self):
