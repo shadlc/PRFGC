@@ -1,7 +1,7 @@
 # python robot for go-cqhttp
 
 ## Description
-一个适用于Linux和Windows理论支持Mac，用于对接[go-cqhttp](https://github.com/Mrs4s/go-cqhttp)进行处理的python程序
+一个自开发适用于Linux和Windows理论支持Mac，用于对接[go-cqhttp](https://github.com/Mrs4s/go-cqhttp)进行处理的python程序，主要用于学习和自用，相较于[Nonebot](https://github.com/nonebot/nonebot2)，此项目更偏向于个人学习和终端交互使用，因为自带了指令系统所以就不做帮助文档了，完全可以依照[go-cqhttp HTTP通讯 API](https://docs.go-cqhttp.org/api/#%E5%9F%BA%E7%A1%80%E4%BC%A0%E8%BE%93)进行操作使用。
 
 ## Usage
 - 安装Python3.7或以上
