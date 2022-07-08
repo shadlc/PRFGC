@@ -32,7 +32,8 @@ class message(object):
 		#群聊@消息以及私聊消息触发
 		if not self.group_id or gVar.at_info in self.rev_msg:
 			if self.group_id: self.rev_msg = self.rev_msg.replace(gVar.at_info,'')
-			if re.search(r'^权限(等级)?$', self.rev_msg): self.authority(auth)
+			if re.search(r'^默认功能$', self.rev_msg): self.help()
+			elif re.search(r'^权限(等级)?$', self.rev_msg): self.authority(auth)
 			elif re.search(r'^(增加|添加|删除|取消)?管理员\s?[0-9]+', self.rev_msg) and auth<=1: self.admin()
 			elif re.search(r'^(撤回|闭嘴|嘘)(！|，)?(懂？)?$', self.rev_msg) and auth<=1: self.recall() 
 			elif re.search(r'^重启$', self.rev_msg) and auth<=1: self.restart()
@@ -47,6 +48,22 @@ class message(object):
 			elif QA_contains(self.rev_msg.replace('!!','')): self.QA_reply()
 			else: self.success = False
 		else: self.success = False
+
+	def help(self):
+		msg = f'{function_name}帮助\n'
+		msg += '\n权限 |查看权限等级'
+		msg += '\n管理员 |修改管理员'
+		msg += '\n撤回 |撤回机器人上一条消息'
+		msg += '\n重启 |重启机器人'
+		msg += '\n计时 [数字] |进行异步计时'
+		msg += '\n测试 |进行基准测试'
+		msg += '\n信息 |获取机器人基础信息'
+		msg += '\n语音 [文字] |文字转语音'
+		msg += '\n向(群)说[文字] |操控机器人发消息'
+		msg += '\n调试 |开关调试模式'
+		msg += '\n静默 |开关静默模式'
+		msg += '\n新知识 [关键字]=[回答] |生成一个问答对'
+		reply(self.rev,msg,True)
 
 	def admin(self):
 		if re.search(r'^(增加|添加)管理员', self.rev_msg):
@@ -90,7 +107,7 @@ class message(object):
 			gVar.is_debug = False
 		else:
 			gVar.is_debug = not gVar.is_debug
-		write_config('Data','SlienceMode',gVar.is_debug)
+		write_config('Data','DebugMode',gVar.is_debug)
 		if gVar.is_debug:
 			msg = '调试模式已开启'
 		else:
@@ -167,10 +184,10 @@ class message(object):
 			number = inputs[0]
 			send = inputs[1]
 			result = False
-			if re.search(r'向[0-9]+', self.rev_msg):
-				result = status_ok(send_msg({'msg_type':'private','number':number,'msg':send}))
-			else:
+			if re.search(r'向群[0-9]+', self.rev_msg):
 				result = status_ok(send_msg({'msg_type':'group','number':number,'msg':send}))
+			else:
+				result = status_ok(send_msg({'msg_type':'private','number':number,'msg':send}))
 			if result: msg = f'发送消息“{send}”成功！'
 			else: msg = f'发送消息失败！'
 		else:
@@ -195,6 +212,12 @@ class message(object):
 	def test(self):
 		if re.search(r'^测试错误', self.rev_msg):
 			raise RuntimeError('测试错误')
+		elif re.search(r'^测试ip\s(\S*)', self.rev_msg):
+			ip = re.search(r'^测试ip\s(\S*)', self.rev_msg).groups()[0]
+			headers = {'Content-Type': 'application/json;charset=UTF-8', 'token': '9d7349e0f6898811e3c00755f927159d'}
+			url = f'https://api.ip138.com/ip/?ip={ip}'
+			r = requests.post(url, headers=headers, timeout=5)
+			msg = str(json.loads(r.text)).replace('[','【').replace(']','】')
 		else:
 			thing = re.search(r'^测试(.*)', self.rev_msg).groups()[0]
 			msg = f'测试{thing}OK!'

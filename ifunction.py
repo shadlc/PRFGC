@@ -41,7 +41,6 @@ def write_config(section,option,value=None):
 	:param value: 配置值
 	"""
 	config = configparser.ConfigParser()
-	config.optionxform = lambda option: option
 	try:
 		config.read(gVar.config_file)
 		config.set(section,option,str(value))
@@ -74,7 +73,6 @@ def init_config():
 	初始化配置文件
 	"""
 	config = configparser.ConfigParser()
-	config.optionxform = lambda option: option
 	try:
 		config.read(gVar.config_file)
 		read_config(config)
@@ -302,7 +300,7 @@ def QA_save(query_key_pairs):
 	"""
 	with open(gVar.QA_file, 'a', encoding='utf-8-sig') as f:
 		for key in query_key_pairs:
-			f.write(f'Q:{key}	A:{query_key_pairs}\n')
+			f.write(f'Q:{key}	A:{query_key_pairs[key]}\n')
 
 def QA_contains(msg):
 	"""

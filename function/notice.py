@@ -67,15 +67,15 @@ class notice(object):
 		recall_time = time.strftime("%Y年%m月%d日%H:%M:%S", time.localtime(self.notice_time))
 		recall_message = None
 		if self.user_id == gVar.self_id and self.operator_id != gVar.self_id:
-			msg = f'{self.operator_name}在{recall_time}将姬姬的消息撤回，姬姬很难过'
-		else:
+			msg = f'{self.operator_name}在{recall_time}将我的消息撤回，我很难过'
+		elif self.user_id != gVar.self_id:
 			for message in self.data.past_message:
 				if 'message_id' in message and self.msg_id == message['message_id']:
 					recall_message = message['raw_message']
 			if recall_message != None:
-				msg = f'{self.operator_name}在{recall_time}试图将{self.user_name}的一条消息 “{recall_message}” 撤回，姬姬还记得'
+				msg = f'{self.operator_name}在{recall_time}试图将{self.user_name}的一条消息 “{recall_message}” 撤回，我还记得'
 			else:
-				msg = f'{self.operator_name}在{recall_time}将{self.user_name}的一条消息撤回，但是姬姬记不得了...'
+				msg = f'{self.operator_name}在{recall_time}将{self.user_name}的一条消息撤回，但是我记不得了...'
 		reply_id('group', self.group_id, msg)
 
 	def group_upload(self):
