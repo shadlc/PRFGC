@@ -14,6 +14,7 @@ import re
 from print_color import *
 from ifunction import *
 
+gVar.placehold_dict = import_json(gVar.lang_file)
 print(random.choice(ALL_COLOR) + gVar.start_info + RESET)
 
 from handle import handle_msg,handle_console
@@ -36,7 +37,7 @@ if sysytem_platform == 'Linux':
 
 	#读取Ctrl C信号
 	def my_handler(signum, frame):
-		warnf(f'正在关闭程序...')
+		warnf(f'%SHUTING_DOWN%')
 		gVar.is_running = False
 		sys.exit()
 	signal.signal(signal.SIGINT, my_handler)
@@ -53,22 +54,20 @@ def listening_console():
 
 #初始化机器人并进行信息和终端监听
 def init():
-	init_config()
-	printf('CQHttp机器人已启动，正在连接CQHttp...', end='', console=False)
+	config_init()
+	printf(f'%ROBOT_STARTING%...', end='', console=False)
 	connect_cqhttp()
-	printf(f'正在监听来自{LPURPLE}{gVar.self_name}({gVar.self_id}){RESET}的消息')
+	printf(f'%LISTENING%: {LPURPLE}{gVar.self_name}({gVar.self_id}){RESET}')
 
-	message_thread = threading.Thread(target=listening_msg)
-	message_thread.setDaemon(True)
-	message_thread.start()
-	console_thread = threading.Thread(target=listening_console)
-	console_thread.setDaemon(True)
-	console_thread.start()
+	threading.Thread(target=listening_msg, daemon=True).start()
+	threading.Thread(target=listening_console, daemon=True).start()
 
 #启动主函数
 if __name__ == '__main__':
 	init()
-	while gVar.is_running:pass
+	while gVar.is_running:
+		time.sleep(0.01)
+		pass
 	if gVar.is_restart:
 		sys.exit(1)
 	else:

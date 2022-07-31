@@ -48,7 +48,7 @@ def handle_msg(rev):
 
 	#如果是调试模式，输出所有接收到的原始信息
 	if gVar.is_debug and not post_type == 'meta_event':
-		printf(f'{LYELLOW}[DATA]{RESET}接收到CQHTTP数据包{LYELLOW}{rev}{RESET}')
+		printf(f'{LYELLOW}[DATA]{RESET}%RECEIVE_PACK%{LYELLOW}{rev}{RESET}')
 
 	#选择存储的数据
 	if user_id == gVar.self_id:
@@ -63,7 +63,11 @@ def handle_msg(rev):
 			gVar.data['u' + str(user_id)] = gVar.memory()
 		data = gVar.data['u' + str(user_id)]
 		gVar.latest_data = 'u' + str(user_id)
-
+	else:
+		if ('default') not in gVar.data:
+			gVar.data['default'] = gVar.memory()
+		data = gVar.data['default']
+		gVar.latest_data = 'default'
 
 	#预处理消息（图片消息链接处理）
 	if 'message' in rev:
@@ -90,10 +94,13 @@ def handle_msg(rev):
 			else:
 				return message(rev)
 	elif post_type == 'notice':
-		if group_id: gVar.data['g' + str(group_id)].past_notice.append(rev)
-		else: gVar.data['u' + str(user_id)].past_notice.append(rev)
+		if group_id:
+			gVar.data['g' + str(group_id)].past_notice.append(rev)
+		else:
+			gVar.data['u' + str(user_id)].past_notice.append(rev)
 		return notice(rev)
 	elif post_type == 'request':
+		gVar.past_request.append(rev)
 		return request(rev)
 	else:
 		return event(rev)
@@ -112,15 +119,11 @@ def message(rev, auth=3):
 		elif gVar.is_show_all_msg:
 			printf(f'{LBLUE}[RECEIVE]{RESET}收到群{LPURPLE}{group_name}({group_id}){RESET}内{LPURPLE}{user_name}({user_id}){RESET}的消息：{rev_msg}')
 
-	thread = threading.Thread(target=execute_msg, args=[rev,auth])
-	thread.setDaemon(True)
-	thread.start()
+	threading.Thread(target=execute_msg, args=[rev,auth], daemon=True).start()
 
 def notice(rev, auth=3):
 
-	thread = threading.Thread(target=execute_notice, args=[rev,auth])
-	thread.setDaemon(True)
-	thread.start()
+	threading.Thread(target=execute_notice, args=[rev,auth], daemon=True).start()
 
 def request(rev, auth=3):
 	request_type = rev['request_type']

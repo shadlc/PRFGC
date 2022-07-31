@@ -55,12 +55,13 @@ def send_msg(resp_dict):
 	number = resp_dict['number']  # 回复账号（群号/好友号）
 	msg = str(resp_dict['msg'])  # 要回复的消息
 	# 将字符中的特殊字符进行url编码
+	msg = msg.replace('%', '%25')
 	msg = msg.replace(' ', '%20')
 	msg = msg.replace('\n', '%0a')
 	msg = msg.replace('[', '%5b')
 	msg = msg.replace(']', '%5d')
-	msg = msg.replace('&', '%26')
 	msg = msg.replace('#', '%23')
+	msg = msg.replace('&', '%26')
 	msg = msg.replace(';', '%3b')
 	msg = msg.replace('\'', '%22')
 	msg = msg.replace('\\', '%5c')

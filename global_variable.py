@@ -6,7 +6,7 @@ from print_color import *
 
 global cqhttp_url,get_port,listening_port,self_name,self_id,admin_id,rev_group,at_info
 global is_running,is_restart,is_debug,is_slience,is_show_heartbeat,is_show_all_msg,is_show_image,is_image_color
-global functions,data,latest_data,latest_send,min_image_width,max_image_width
+global functions,data,latest_data,latest_send,min_image_width,max_image_width,placehold_dict
 
 is_running = True
 is_restart = True
@@ -17,6 +17,7 @@ is_image_color = True
 functions = []
 admin_id = []
 rev_group = []
+placehold_dict = {}
 latest_data = ''
 latest_request = ''
 self_message = deque()
@@ -30,10 +31,12 @@ class memory(object):
   def __init__(self):
     self.past_message = deque(maxlen=10)
     self.past_notice = deque(maxlen=10)
+past_request = deque(maxlen=10)
 
 
-config_file = 'config.ini'
-QA_file = 'QA_data.txt'
+config_file = 'data/config.ini'
+QA_file = 'data/QA_data.txt'
+lang_file = 'data/lang.json'
 start_info = '''
   ██████╗  ██████╗        ██████╗ ██████╗ ██╗  ██╗████████╗████████╗██████╗ 
  ██╔════╝ ██╔═══██╗      ██╔════╝██╔═══██╗██║  ██║╚══██╔══╝╚══██╔══╝██╔══██╗

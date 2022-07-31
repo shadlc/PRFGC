@@ -7,7 +7,7 @@ from api_cqhttp import *
 
 function_name = '基础消息处理模块'
 gVar.functions.append(function_name)
-printf(f'{LYELLOW}{function_name}已接入！{RESET}',console=False)
+printf(f'{LYELLOW}{function_name}%DETECTED%{RESET}',console=False)
 
 class message(object):
 	def __init__(self,rev,auth):
@@ -70,7 +70,7 @@ class message(object):
 			number = re.search(r'^(增加|添加)管理员([0-9]+)', self.rev_msg).groups()[1]
 			if number not in gVar.admin_id:
 				gVar.admin_id.append(number)
-				write_config('Data','Op',str(gVar.admin_id).strip('[]').replace('\'',''))
+				config_write('Data','Op',str(gVar.admin_id).strip('[]').replace('\'',''))
 				printf(f'{LPURPLE}{get_user_name(number)}({number}){RESET}已设置为管理员')
 				msg = f'{get_user_name(number)}({number})已设置为管理员'
 			else:
@@ -81,7 +81,7 @@ class message(object):
 			number = re.search(r'^(删除|取消)管理员([0-9]+)', self.rev_msg).groups()[1]
 			if number in gVar.admin_id:
 				gVar.admin_id.remove(number)
-				write_config('Data','Op',str(gVar.admin_id).strip('[\'\']').replace('\'',''))
+				config_write('Data','Op',str(gVar.admin_id).strip('[\'\']').replace('\'',''))
 				printf(f'{LPURPLE}{get_user_name(number)}({number}){RESET}不再是管理员')
 				msg = f'{get_user_name(number)}({number})不再是管理员'
 			else:
@@ -92,12 +92,12 @@ class message(object):
 		reply(self.rev,msg,True)
 
 	def authority(self,auth):
-		if auth == 0 : auth_level = '后台权限'
-		elif auth == 1 : auth_level = '管理员权限'
-		elif auth == 2 : auth_level = '全功能权限'
-		elif auth == 3 : auth_level = '陌生人权限'
-		else: auth_level = '未知权限'
-		msg = f'您的权限等级为：{auth_level}'
+		if auth == 0 : auth_level = f'%CONSOLE_AUTH%'
+		elif auth == 1 : auth_level = f'%ADMIN_AUTH%'
+		elif auth == 2 : auth_level = f'%FULL_AUTH%'
+		elif auth == 3 : auth_level = f'%STRANGER_AUTH%'
+		else: auth_level = f'%UNKNOW_AUTH%'
+		msg = f'%YOUR_AUTH%: {auth_level}'
 		reply(self.rev,msg)
 
 	def debug(self):
@@ -107,20 +107,21 @@ class message(object):
 			gVar.is_debug = False
 		else:
 			gVar.is_debug = not gVar.is_debug
-		write_config('Data','DebugMode',gVar.is_debug)
+		config_write('Data','DebugMode',gVar.is_debug)
 		if gVar.is_debug:
-			msg = '调试模式已开启'
+			msg = f'%DEBUG_MODE%%ENABLED%'
+			warnf(f'%DEBUG_MODE%%ENABLED%')
 		else:
-			msg = '调试模式已关闭'
-		warnf('调试模式已开启') if gVar.is_debug else warnf('调试模式已关闭')
+			msg = f'%DEBUG_MODE%%DISABLED%'
+			warnf(f'%DEBUG_MODE%%DISABLED%')
 		reply(self.rev,msg,True)
 
 	def delay(self):
 		sleep_time = int(re.search(r'([0-9]+)', self.rev_msg).groups()[0])
-		msg = '计时' + str(sleep_time) + '秒开始'
+		msg = f'%TIMING%' + str(sleep_time) + f'%SECOND%%START%'
 		reply(self.rev,msg)
 		time.sleep(sleep_time)
-		msg = '计时' + str(sleep_time) + '秒结束'
+		msg = f'%TIMING%' + str(sleep_time) + f'%SECOND%%FINISH%'
 		reply(self.rev,msg)
 
 	def info(self):
@@ -131,7 +132,7 @@ class message(object):
 		msg += (f'\n运行平台：{info["runtime_os"]}')
 		msg += (f'\n登陆设备：{info["device"]}')
 		msg += (f'\n==========变量信息==========')
-		msg += (f'\n调试模式：{gVar.is_debug}')
+		msg += (f'\n%DEBUG_MODE%: {gVar.is_debug}')
 		msg += (f'\n心跳包显示：{gVar.is_show_heartbeat}')
 		msg += (f'\n对接机器人：{gVar.self_name}({gVar.self_id})')
 		msg += (f'\n管理员列表：{gVar.admin_id}')
@@ -146,7 +147,7 @@ class message(object):
 			query_key_pairs = {}
 			query_key_pairs[key] = value
 			QA_save(query_key_pairs)
-			printf('记录新对话' + key + '：' + value)
+			printf('%DIALOG_SAVED%' + key + '：' + value)
 			msg = QA_get('!!知识增加')
 		else:
 			msg = '请使用“新知识 提问关键字=回答”来记录问答'
@@ -164,12 +165,12 @@ class message(object):
 			result = del_msg({'message_id':msg_id})
 			gVar.self_message.pop()
 			if status_ok(result):
-				printf(f'撤回消息{LPURPLE}{msg}{RESET}成功！')
+				printf(f'%RECALL_MESSAGE%{LPURPLE}{msg}{RESET}%SUCCESS%')
 			else:
-				msg = '撤回消息{LPURPLE}{msg}{RESET}出错'
+				msg = f'%RECALL_MESSAGE%{LPURPLE}{msg}{RESET}%FAIL%'
 				reply(self.rev,msg)
 		else:
-			msg = '暂无可撤回的历史消息'
+			msg = f'%NO_MSG_TO_RECALL%'
 			reply(self.rev,msg)
 
 	def restart(self):
@@ -188,8 +189,8 @@ class message(object):
 				result = status_ok(send_msg({'msg_type':'group','number':number,'msg':send}))
 			else:
 				result = status_ok(send_msg({'msg_type':'private','number':number,'msg':send}))
-			if result: msg = f'发送消息“{send}”成功！'
-			else: msg = f'发送消息失败！'
+			if result: msg = f'%SEND_MESSAGE%"{send}"%SUCCESS%'
+			else: msg = f'%SEND_MESSAGE%%FAIL%'
 		else:
 			msg = re.search(r'说\s?(\S*)', self.rev_msg).groups()[0]
 		reply(self.rev,msg)
@@ -201,17 +202,17 @@ class message(object):
 			gVar.is_slience = False
 		else:
 			gVar.is_slience = not gVar.is_slience
-		write_config('Data','SlienceMode',gVar.is_slience)
+		config_write('Data','SlienceMode',gVar.is_slience)
 		if gVar.is_slience:
-			msg = '静默模式已开启'
+			msg = f'%SILENCE_MODE%%ENABLED%'
 		else:
-			msg = '静默模式已关闭'
-		warnf('静默模式已开启') if gVar.is_slience else warnf('静默模式已关闭')
+			msg = f'%SILENCE_MODE%%DISABLED%'
+		warnf(f'%SILENCE_MODE%%ENABLED%') if gVar.is_slience else warnf(f'%SILENCE_MODE%%DISABLED%')
 		reply(self.rev,msg,True)
 
 	def test(self):
 		if re.search(r'^测试错误', self.rev_msg):
-			raise RuntimeError('测试错误')
+			raise RuntimeError('%TEST_ERROR%')
 		elif re.search(r'^测试ip\s(\S*)', self.rev_msg):
 			ip = re.search(r'^测试ip\s(\S*)', self.rev_msg).groups()[0]
 			headers = {'Content-Type': 'application/json;charset=UTF-8', 'token': '9d7349e0f6898811e3c00755f927159d'}
@@ -220,16 +221,16 @@ class message(object):
 			msg = str(json.loads(r.text)).replace('[','【').replace(']','】')
 		else:
 			thing = re.search(r'^测试(.*)', self.rev_msg).groups()[0]
-			msg = f'测试{thing}OK!'
+			msg = f'%TEST%{thing}OK!'
 		reply(self.rev,msg)
 		
 	def unknow(self):
-		msg = f'未知指令'
+		msg = f'%UNKONW_CMD%'
 		reply(self.rev,msg)
 
 	def voice(self):
 		if re.search(r'语音\s?\S+', self.rev_msg):
 			msg = '[CQ:tts,text=' + re.search(r'语音\s?(\S+)', self.rev_msg).groups()[0] + ' ]'
 		else:
-			msg = '[CQ:tts,text=请输入需要让我读出来的字嘛]'
+			msg = f'[CQ:tts,text=%SOMETHING_WANT_ME_SAY%]'
 		reply(self.rev,msg)
