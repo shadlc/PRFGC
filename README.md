@@ -28,12 +28,14 @@
 - 方便快捷的随机文本选择和回复
 - 对图片信息的终端彩色像素画显示
 - 支持大部分常用go-cqhttp接口调用
-<img src="example/screenshot-1.png" width="280">
-<img src="example/screenshot-2.png" width="280">
-<img src="example/screenshot-3.png" width="280">
-<img src="example/screenshot-4.png" width="280">
-<img src="example/screenshot-5.png" width="280">
-<img src="example/screenshot-6.png" width="280">
-<img src="example/screenshot-7.png" width="280">
-<img src="example/screenshot-8.png" width="280">
-<img src="example/screenshot-9.png" width="280">
+<p align="center">
+  <img src="example/screenshot-1.png" width="500">
+  <img src="example/screenshot-2.png" width="500">
+  <img src="example/screenshot-3.png" width="500">
+  <img src="example/screenshot-4.png" width="500">
+  <img src="example/screenshot-5.png" width="500">
+  <img src="example/screenshot-6.png" width="500">
+  <img src="example/screenshot-7.png" width="500">
+  <img src="example/screenshot-8.png" width="500">
+  <img src="example/screenshot-9.png" width="500">
+</p>
