@@ -1,5 +1,5 @@
 {
-	"ROBOT_NAME":"小助手",
+	"ROBOT_NAME":"协奏姬",
 	"DISABLED":"已关闭",
 	"ENABLED":"已开启",
 	"SUCCESS":"成功！",
@@ -23,7 +23,7 @@
 	"CONSOLE_AUTH":"后台权限",
 	"ADMIN_AUTH":"管理员权限",
 	"FULL_AUTH":"全功能权限",
-	"STRANGER_AUTH":"陌生人权限",
+	"STRANGER_AUTH":"普通权限",
 	"UNKNOW_AUTH":"未知权限",
 	"YOUR_AUTH":"您的权限等级为",
 	"DIALOG_SAVED":"记录新对话",

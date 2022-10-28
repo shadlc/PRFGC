@@ -4,9 +4,9 @@
 from collections import deque
 from print_color import *
 
-global cqhttp_url,get_port,listening_port,self_name,self_id,admin_id,rev_group,at_info
+global cqhttp_url,get_port,listening_port,data_dir,self_name,self_id,admin_id,rev_group,at_info
 global is_running,is_restart,is_debug,is_slience,is_show_heartbeat,is_show_all_msg,is_show_image,is_image_color
-global functions,data,latest_data,latest_send,min_image_width,max_image_width,placehold_dict
+global modules_name,modules,data,latest_data,latest_send,min_image_width,max_image_width,placehold_dict
 
 is_running = True
 is_restart = True
@@ -14,13 +14,14 @@ is_restart = True
 is_show_image = True
 is_image_color = True
 
-functions = []
+modules_name = []
+modules = []
 admin_id = []
 rev_group = []
 placehold_dict = {}
 latest_data = ''
-latest_request = ''
-self_message = deque()
+request_list = deque(maxlen=10)
+self_message = deque(maxlen=20)
 
 class cache:
   user_name = dict()
@@ -51,6 +52,7 @@ first_start_info = f'''
 使用 {LCYAN}group main 群号{RESET} 设置主对接群
 使用 {LCYAN}op 用户QQ{RESET} 设置管理员
 使用 {LCYAN}info{RESET} 查看程序运行状态和核心信息
+使用 {LCYAN}help{RESET} 查看程序控制台帮助
 某些设置可以打开{LPURPLE}config.ini{RESET}进行修改
 ==================================================
 '''

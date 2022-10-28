@@ -10,13 +10,13 @@ import global_variable as gVar
 
 def request_to_json(msg):
 	for i in range(len(msg)):
-		if msg[i]=='{':
+		if msg[i]=='{' or msg[i]=="[":
 			return json.loads(msg[i:])
 
 def get_request(url):
 	try:
 		get_url = 'http://' + gVar.cqhttp_url + ':' + gVar.get_port + url
-		gVar.latest_request = get_url
+		gVar.request_list.append(get_url)
 		r = requests.get(get_url)
 		rev_json = json.loads(r.text)
 		return rev_json
@@ -34,7 +34,7 @@ def connect_cqhttp():
 	result = get_request('/get_login_info')
 	gVar.self_name = result['data']['nickname']
 	gVar.self_id = result['data']['user_id']
-	gVar.at_info = '[CQ:at,qq=' + str(gVar.self_id) + '] '
+	gVar.at_info = '[CQ:at,qq=' + str(gVar.self_id) + ']'
 	return [result['data']['nickname'],result['data']['user_id']]
 
 def receive_msg():

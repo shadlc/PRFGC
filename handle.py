@@ -63,11 +63,7 @@ def handle_msg(rev):
 			gVar.data['u' + str(user_id)] = gVar.memory()
 		data = gVar.data['u' + str(user_id)]
 		gVar.latest_data = 'u' + str(user_id)
-	else:
-		if ('default') not in gVar.data:
-			gVar.data['default'] = gVar.memory()
-		data = gVar.data['default']
-		gVar.latest_data = 'default'
+
 
 	#预处理消息（图片消息链接处理）
 	if 'message' in rev:
@@ -94,10 +90,8 @@ def handle_msg(rev):
 			else:
 				return message(rev)
 	elif post_type == 'notice':
-		if group_id:
-			gVar.data['g' + str(group_id)].past_notice.append(rev)
-		else:
-			gVar.data['u' + str(user_id)].past_notice.append(rev)
+		if group_id: gVar.data['g' + str(group_id)].past_notice.append(rev)
+		else: gVar.data['u' + str(user_id)].past_notice.append(rev)
 		return notice(rev)
 	elif post_type == 'request':
 		gVar.past_request.append(rev)

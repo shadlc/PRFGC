@@ -7,23 +7,31 @@ import requests
 import random
 import time
 import io
+import os
 import re
 
 from print_color import *
 from api_cqhttp import *
 import global_variable  as gVar
 
-def read_config(config):
+def module_enable(name,module):
+	gVar.modules_name.append(name)
+	gVar.modules.append(module)
+	printf(f'{name}%DETECTED%',console=False)
+
+
+def config_read(config):
 	"""
 	读取配置文件
 	:param config: configparser对象
 	"""
-	gVar.cqhttp_url = config.get('Net','CQHttpUrl')
-	gVar.get_port = config.get('Net','CQHttpPort')
-	gVar.listening_port = config.get('Net','ListeningPort')
+	gVar.cqhttp_url = config.get('CQHttp','CQHttpUrl')
+	gVar.get_port = config.get('CQHttp','CQHttpPort')
+	gVar.listening_port = config.get('CQHttp','ListeningPort')
+	gVar.data_dir = config.get('CQHttp','DataDir')
 
-	gVar.rev_group = config.get('Data','ReceiveGroup').split(',') if 'ReceiveGroup' in config['Data'] else []
-	gVar.admin_id = config.get('Data','Op').split(',') if 'Op' in config['Data'] else []
+	gVar.rev_group = config.get('Data','ReceiveGroup').split(', ') if 'ReceiveGroup' in config['Data'] else []
+	gVar.admin_id = config.get('Data','Op').split(', ') if 'Op' in config['Data'] else []
 	gVar.is_debug = True if 'True' == config.get('Data','DebugMode') else False
 	gVar.is_slience = True if 'True' == config.get('Data','SlienceMode') else False
 	gVar.is_show_heartbeat = True if 'True' == config.get('Data','ShowHeartBeat') else False
@@ -33,7 +41,7 @@ def read_config(config):
 	gVar.min_image_width = int(config.get('Data','MinImageWidth')) if 'MinImageWidth' in config['Data'] else 10
 	gVar.max_image_width = int(config.get('Data','MaxImageWidth')) if 'MaxImageWidth' in config['Data'] else 100
 
-def write_config(section,option,value=None):
+def config_write(section,option,value=None):
 	"""
 	写入配置文件
 	:param section: 配置类型
@@ -49,37 +57,43 @@ def write_config(section,option,value=None):
 	except:
 		errorf('写入配置文件失败！')
 
-def reset_config(config):
+def config_reset(config):
 	"""
 	重置配置文件
 	:param config: configparser对象
 	"""
 	print(gVar.first_start_info)
 	with open(gVar.config_file, mode='w') as f:
-		f.write('''[Net]
-CQHttpUrl = 127.0.0.1
-CQHttpPort = 5700
-ListeningPort = 5701
+		f.write('[CQHttp]\nCQHttpUrl = 127.0.0.1\nCQHttpPort = 5700\nListeningPort = 5701\nDataDir = ../cqhttp/data\n\n[Data]\nDebugMode = False\nSlienceMode = False\nShowHeartBeat = False\nShowAllMessage = False\nShowImage = False')
 
-[Data]
-DebugMode = False
-SlienceMode = False
-ShowHeartBeat = False
-ShowAllMessage = False
-ShowImage = False''')
-
-def init_config():
+def config_init():
 	"""
 	初始化配置文件
 	"""
 	config = configparser.ConfigParser()
 	try:
 		config.read(gVar.config_file)
-		read_config(config)
+		config_read(config)
 	except:
-		reset_config(config)
+		config_reset(config)
 		config.read(gVar.config_file)
-		read_config(config)
+		config_read(config)
+
+def import_json(file):
+	if not os.path.exists(file):
+		try:
+			open(file,'w', encoding='utf-8').write("{}")
+		except:
+			errorf('导入配置文件失败！')
+			return None
+	return json.load(open(file, 'r', encoding='utf-8'))
+
+def save_json(file_name, data):
+	try:
+		json.dump(data,open(file_name, 'w',encoding='utf-8'),indent=2,ensure_ascii=False)
+	except:
+		errorf('写入数据失败！')
+  
 
 def calc_size(bytes):
 	"""
@@ -169,6 +183,14 @@ def status_ok(respond):
 	else:
 		return False
 
+def handle_placehold(text,placehold_dict):
+	pattern = re.compile(r'(%\S+?%)')
+	flags = pattern.findall(str(text))
+	for flag in flags:
+		if flag.replace('%','') in placehold_dict:
+			text = re.sub(flag, placehold_dict[flag.replace('%','')], str(text))
+	return text
+
 def reply(rev,msg,force=False):
 	"""
 	快捷回复消息
@@ -177,6 +199,7 @@ def reply(rev,msg,force=False):
 	:param force: 无视静默模式发送消息
 	:return: 发送消息后返回的json信息
 	"""
+	msg = handle_placehold(str(msg),gVar.placehold_dict)
 	if rev['post_type'] == 'message' and(not gVar.is_slience or force):
 		if rev['message_type'] == 'group':
 			group_id = rev['group_id']
@@ -189,7 +212,7 @@ def reply(rev,msg,force=False):
 			printf(f'{LGREEN}[SEND]{RESET}向{LPURPLE}{user_name}({user_id}){RESET}发送消息：{msg}')
 			return send_msg({'msg_type':'private','number':user_id,'msg':msg})
 
-def reply_id(type,id,msg):
+def reply_id(type,id,msg,force=False):
 	"""
 	按id回复消息
 	:param type: 发送类型
@@ -197,13 +220,20 @@ def reply_id(type,id,msg):
 	:param msg: 发送的消息内容
 	:return: 发送消息后返回的json信息
 	"""
-	if type == 'group':
-		printf(f'{LGREEN}[SEND]{RESET}向群{LPURPLE}{get_group_name(id)}({id}){RESET}发送消息：{msg}')
-		return send_msg({'msg_type':'group','number':id,'msg':msg})
-	else:
-		printf(f'{LGREEN}[SEND]{RESET}向{LPURPLE}{get_user_name(id)}({id}){RESET}发送消息：{msg}')
-		return send_msg({'msg_type':'private','number':id,'msg':msg})
+	msg = handle_placehold(str(msg),gVar.placehold_dict)
+	if (not gVar.is_slience or force):
+		if type == 'group':
+			printf(f'{LGREEN}[SEND]{RESET}向群{LPURPLE}{get_group_name(id)}({id}){RESET}发送消息：{msg}')
+			return send_msg({'msg_type':'group','number':id,'msg':msg})
+		else:
+			printf(f'{LGREEN}[SEND]{RESET}向{LPURPLE}{get_user_name(id)}({id}){RESET}发送消息：{msg}')
+			return send_msg({'msg_type':'private','number':id,'msg':msg})
 
+def reply_back(owner_id, msg):
+  if owner_id[:1] == 'u':
+    reply_id('private',owner_id[1:], msg)
+  else:
+    reply_id('group',owner_id[1:], msg)
 
 def quick_reply(rev,msg):
 	"""
@@ -212,6 +242,7 @@ def quick_reply(rev,msg):
 	:param msg: 发送的消息内容
 	:return: 发送消息后返回的json信息
 	"""
+	msg = handle_placehold(str(msg),gVar.placehold_dict)
 	if rev['post_type'] == 'message':
 		gVar.self_message.append({'message':msg,'message_id':0,'message_type':rev['message_type'],'user_id':gVar.self_id,'time':time.time()})
 		return handle_quick_operation({'context':rev,'operation':{'reply':msg}})
@@ -309,6 +340,8 @@ def QA_contains(msg):
 	:return: 是否存在
 	"""
 	for name in QA_fetch().keys():
+		if '#' in name and msg == name[1:]:
+			return True
 		if name in msg:
 			return True
 	return False
@@ -319,16 +352,13 @@ def QA_get(msg):
 	:param msg: 需要搜寻的键值
 	:return: 键值的对应数据
 	"""
-	max_match = 0
+	max_match = 1
 	answer_list = []
-	for query,answer in QA_fetch().items():
-		match = len(set(query) & set(msg))
-		if match > max_match:
+	for query,answers in QA_fetch().items():
+		match = len(set(query) & set(str(msg)))
+		if match >= max_match:
 			max_match = match
-			answer_list = []
-			answer_list = answer
-		elif match == max_match:
-			answer_list.append(answer)
+			answer_list = answers
 	return random.choice(answer_list)
 
 def printf(msg,end='\n',console=True):
@@ -338,6 +368,7 @@ def printf(msg,end='\n',console=True):
 	:param end: 末尾字符
 	:param console: 是否增加一行<console>
 	"""
+	msg = handle_placehold(str(msg),gVar.placehold_dict)
 	prefix = '\r[' + time.strftime("%H:%M:%S", time.localtime()) + ' INFO] '
 	if gVar.is_show_image: msg = msg_img2char(msg)
 	print(f'{prefix}{msg}',end=end)
@@ -350,6 +381,7 @@ def warnf(msg,end='\n',console=True):
 	:param end: 末尾字符
 	:param console: 是否增加一行<console>
 	"""
+	msg = handle_placehold(str(msg),gVar.placehold_dict)
 	msg = msg.replace(RESET,LYELLOW)
 	prefix = '\r[' + time.strftime("%H:%M:%S", time.localtime()) + ' WARN] '
 	print(f'{LYELLOW}{prefix}{msg}{RESET}',end=end)
@@ -362,6 +394,7 @@ def errorf(msg,end='\n',console=True):
 	:param end: 末尾字符
 	:param console: 是否增加一行<console>
 	"""
+	msg = handle_placehold(str(msg),gVar.placehold_dict)
 	prefix = '\r[' + time.strftime("%H:%M:%S", time.localtime()) + ' ERROR] '
 	print(f'{LRED}{prefix}{msg}{RESET}',end=end)
 	if console: print(f'\r{LGREEN}<console>{RESET} ',end='')
@@ -372,7 +405,7 @@ def simplify_traceback(tb):
 	:param tb: 获取的错误报告
 	:return: 易读的错误报告
 	"""
-	result = '\n按从执行顺序排序有\n'
+	result = '按从执行顺序排序有\n'
 	tb = tb.strip().split('\n')
 	for excepts in tb[1:]:
 		if re.search(r'(\\|/)(\w*?\.py).*line\s([0-9]+).*in\s(.*)', excepts):

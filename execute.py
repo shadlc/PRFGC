@@ -8,13 +8,15 @@ import global_variable as gVar
 from print_color import *
 from ifunction import *
 from api_cqhttp import *
-from function import *
+from module import *
 
 class execute_msg(object):
 	def __init__(self,rev,auth):
 		#在这里添加模块，注意执行顺序
 		try:
-			if message(rev,auth).success: pass
+			for mod in gVar.modules:
+				if mod(rev,auth).success:
+					break
 		except Exception as e:
 			if gVar.is_debug:
 				reply(rev,f'{QA_get("!!致命错误")}{traceback.format_exc()}')
@@ -25,7 +27,7 @@ class execute_notice(object):
 	def __init__(self,rev,auth):
 		notice(rev,auth)
 		
-gVar.CMD = {'add': '对添加请求进行操作', 'debug': '开关调试模式', 'deop': '取消管理员权限', 'device': '设置在线机型', 'exit': '关闭程序', 'get': '获取用户或群的信息', 'group': '修改对接群列表', 'groupmsg': '发送群聊消息', 'groupvoice': '发送群语音消息', 'help': '打开帮助菜单', 'history': '查看历史消息', 'info': '查看cqhttp版本和相关信息', 'latest': '查看发送的上一请求内容', 'msg': '发送私聊消息', 'notice': '发送群公告', 'ocr': '识别图片中的文字', 'op': '增加管理员权限', 'recall': '撤回消息', 'restart': '重启程序', 'reload': '重载配置文件', 'request': '手动调用CQHttpAPI', 'reply': '回复上一条消息(不支持快捷撤回)', 'say': '向主对接群发送消息', 'set': '设置变量', 'slience': '静默模式', 'stop': '关闭程序', 'test': '测试接口', 'voice': '发送语音消息'}
+gVar.CMD = {'add': '对添加请求进行操作', 'debug': '开关调试模式', 'deop': '取消管理员权限', 'device': '设置在线机型', 'exit': '关闭程序', 'get': '获取用户或群的信息', 'group': '修改对接群列表', 'groupmsg': '发送群聊消息', 'groupvoice': '发送群语音消息', 'help': '打开帮助菜单', 'history': '查看历史消息', 'info': '查看CQHttp版本和相关信息', 'latest': '查看向CQHttp请求的历史记录', 'msg': '发送私聊消息', 'notice': '发送群公告', 'ocr': '识别图片中的文字', 'op': '增加管理员权限', 'recall': '撤回消息', 'restart': '重启程序', 'reload': '重载配置文件', 'request': '手动调用CQHttpAPI', 'reply': '回复上一条消息(不支持快捷撤回)', 'say': '向主对接群发送消息', 'set': '设置变量', 'slience': '静默模式', 'stop': '关闭程序', 'test': '测试接口', 'voice': '发送语音消息'}
 class execute_cmd(object):
 	def __init__(self,cmd):
 		self.cmd_list = {'添加': self.add, 'add': self.add, '调试': self.debug, 'debug': self.debug, '取消管理员': self.deop, 'deop': self.deop, '设备': self.device, 'device': self.device, 'exit': self.stop, '获取信息': self.get, 'get': self.get, '群': self.group, 'group': self.group, '群消息': self.groupmsg, 'groupmsg': self.groupmsg, '群语音': self.groupvoice, 'groupvoice': self.groupvoice, '帮助': self.help, '？': self.help, '?': self.help, 'help': self.help, '历史消息': self.history, 'history': self.history, '信息': self.info, 'info': self.info, '最后请求': self.latest, 'latest': self.latest, '消息': self.msg, 'msg': self.msg, '公告': self.notice, 'notice': self.notice, ' 识别': self.ocr, 'ocr': self.ocr, '管理员': self.op, 'op': self.op, '撤回': self.recall, 'recall': self.recall, '重启': self.restart, 'restart': self.restart, '重载': self.reload, 'reload': self.reload, '请求': self.request, 'request': self.request, '回复': self.reply, 'reply': self.reply, '说': self.say, 'say': self.say, '设置': self.set, 'set': self.set, '静默': self.slience, 'slience': self.slience, '关闭': self.stop, 'stop': self.stop, '测试': self.test, 'test': self.test, '语音': self.voice, 'voice': self.voice}
@@ -40,27 +42,24 @@ class execute_cmd(object):
 				warnf(f'未知指令！请使用help获取帮助')
 
 	def add(self,argv=''):
-		if re.search(r'(agree|deny)\s?(.+)?',argv):
-			inputs = re.search(r'^(agree|deny)\s?(.+)?',argv).groups()
-			if not len(gVar.latest_data):
+		if re.search(r'(agree|deny)\s?(.*)',argv):
+			inputs = re.search(r'(agree|deny)\s?(.*)',argv).groups()
+			if not len(gVar.past_request):
 				warnf('未寻找到上一条信息记录！')
-			elif inputs[0] == 'agree':
-				rev = gVar.data[gVar.latest_data].past_notice[-1]
+			else:
+				rev = gVar.past_request[-1]
 				user_id = rev['user_id']
 				user_name = get_user_name(user_id)
-				reply_add(rev,'true',inputs[1])
-			else:
-				result = reply_add(rev,'false',inputs[1])
-				if status_ok(result):
-					printf(f'成功拒绝来自{LPURPLE}{user_name}({user_id}){RESET}请求')
+				if inputs[0] == 'agree':
+					reply_add(rev,'true',inputs[1])
 				else:
-					warnf(f'处理请求出错！请参考cqhttp端输出')
+					reply_add(rev,'false',inputs[1])
 		else:
 			printf(f'请使用 {LCYAN}add agree/deny 备注{RESET} 同意或拒绝申请')
 
 	def debug(self,argv=''):
 		gVar.is_debug = not gVar.is_debug
-		write_config('Data','DebugMode',gVar.is_debug)
+		config_write('Data','DebugMode',gVar.is_debug)
 		warnf('DEBUG模式已开启') if gVar.is_debug else warnf('DEBUG模式已关闭')
 
 	def deop(self,argv=''):
@@ -69,7 +68,7 @@ class execute_cmd(object):
 			user_name = get_user_name(user_id)
 			if user_id in gVar.admin_id:
 				gVar.admin_id.remove(user_id)
-				write_config('Data','Op',str(gVar.admin_id).strip('[\'\']').replace('\'',''))
+				config_write('Data','Op',str(gVar.admin_id).strip('[\'\']').replace('\'',''))
 				printf(f'{LPURPLE}{user_name}({user_id}){RESET}不再是管理员')
 			else:
 				warnf(f'{LPURPLE}{user_name}({user_id}){RESET}不是管理员！')
@@ -121,29 +120,29 @@ class execute_cmd(object):
 
 	def group(self,argv=''):
 		if re.search(r'add\s+(\d+)',argv):
-			group_id = re.search(r'\s+(\d+)',argv).groups()[0]
+			group_id = re.search(r'\s+(\d+)',argv).groups()[0].strip()
 			group_name = get_group_name(group_id)
 			if group_id not in gVar.rev_group:
 				gVar.rev_group.append(group_id)
-				write_config('Data','ReceiveGroup',str(gVar.rev_group).strip('[]').replace('\'',''))
+				config_write('Data','ReceiveGroup',str(gVar.rev_group).strip('[]').replace('\'',''))
 				printf(f'群{LPURPLE}{group_name}({group_id}){RESET}已添加至对接群列表')
 			else:
 				warnf(f'群{LPURPLE}{group_name}({group_id}){RESET}已经在对接群列表中！')
 		elif re.search(r'remove\s+(\d+)',argv):
-			group_id = re.search(r'\s+(\d+)',argv).groups()[0]
+			group_id = re.search(r'\s+(\d+)',argv).groups()[0].strip()
 			group_name = get_group_name(group_id)
 			if group_id in gVar.rev_group:
 				gVar.rev_group.remove(group_id)
-				write_config('Data','ReceiveGroup',str(gVar.rev_group).strip('[]').replace('\'',''))
+				config_write('Data','ReceiveGroup',str(gVar.rev_group).strip('[]').replace('\'',''))
 				printf(f'群{LPURPLE}{group_name}({group_id}){RESET}已从对接群列表中移除')
 			else:
 				warnf(f'群{LPURPLE}{group_name}({group_id}){RESET}不在对接群列表中！')
 		elif re.search(r'main\s+(\d+)',argv):
-			group_id = re.search(r'\s+(\d+)',argv).groups()[0]
+			group_id = re.search(r'\s+(\d+)',argv).groups()[0].strip()
 			group_name = get_group_name(group_id)
 			if group_id in gVar.rev_group: gVar.rev_group.remove(group_id)
 			gVar.rev_group.insert(0,group_id)
-			write_config('Data','ReceiveGroup',str(gVar.rev_group).strip('[]').replace('\'',''))
+			config_write('Data','ReceiveGroup',str(gVar.rev_group).strip('[]').replace('\'',''))
 			printf(f'群{LPURPLE}{group_name}({group_id}){RESET}已设置为主对接群')
 		else:
 			printf(f'请使用 {LCYAN}group add/remove 群号{RESET} 增加或删除对接群')
@@ -159,7 +158,7 @@ class execute_cmd(object):
 			if status_ok(result):
 				printf(f'向群{LPURPLE}{group_name}({group_id}){RESET}发送消息：{LYELLOW}{msg}')
 			else:
-				warnf(f'向群{LPURPLE}{group_name}({group_id}){RESET}发送消息出错！请参考cqhttp端输出以及注意是否被禁言')
+				warnf(f'向群{LPURPLE}{group_name}({group_id}){RESET}发送消息出错！请参考CQHttp端输出以及注意是否被禁言')
 		else:
 			printf(f'请使用 {LCYAN}groupmsg 群号 消息内容{RESET} 发送消息')
 
@@ -173,7 +172,7 @@ class execute_cmd(object):
 			if status_ok(result):
 				printf(f'向群{LPURPLE}{group_name}({group_id}){RESET}发送语音消息：{LYELLOW}{inputs[1]}')
 			else:
-				warnf(f'向群{LPURPLE}{group_name}({group_id}){RESET}发送语音消息出错！请参考cqhttp端输出')
+				warnf(f'向群{LPURPLE}{group_name}({group_id}){RESET}发送语音消息出错！请参考CQHttp端输出')
 		else:
 			printf(f'请使用 {LCYAN}groupvoice 群号 语音消息{RESET} 发送消息')
 
@@ -236,7 +235,7 @@ class execute_cmd(object):
 		printf(f'管理员列表：{LYELLOW}{gVar.admin_id}{RESET}')
 		printf(f'对接群列表：{LYELLOW}{gVar.rev_group}{RESET}')
 		printf(f'显示全部群消息：{LYELLOW}{gVar.is_show_all_msg}{RESET}')
-		printf(f'已安装模块：{LYELLOW}{gVar.functions}{RESET}')
+		printf(f'已安装模块：{LYELLOW}{gVar.modules.values()}{RESET}')
 		printf('=========字符画信息=========')
 		printf(f'显示字符画：{LYELLOW}{gVar.is_show_image}{RESET}')
 		printf(f'彩色字符画：{LYELLOW}{gVar.is_image_color}{RESET}')
@@ -248,8 +247,9 @@ class execute_cmd(object):
 		printf('============================')
 
 	def latest(self,argv=''):
-		request = gVar.latest_request
-		printf(f'上一发送请求为：{LYELLOW}{request}{RESET}')
+		printf(f'向CQHttp请求的历史记录：')
+		for request in gVar.request_list:
+			printf(f'{LYELLOW}[REQUEST]{RESET}{request}{LPURPLE}{RESET}')
 
 	def msg(self,argv=''):
 		if re.search(r'(\d+)\s+(.+)',argv):
@@ -261,7 +261,7 @@ class execute_cmd(object):
 			if status_ok(result):
 				printf(f'向{LPURPLE}{user_name}({user_id}){RESET}发送消息：{msg}')
 			else:
-				warnf(f'向{LPURPLE}{user_name}({user_id}){RESET}发送消息出错！请参考cqhttp端输出')
+				warnf(f'向{LPURPLE}{user_name}({user_id}){RESET}发送消息出错！请参考CQHttp端输出')
 		else:
 			printf(f'请使用 {LCYAN}msg QQ号 消息内容{RESET} 发送消息')
 
@@ -300,7 +300,7 @@ class execute_cmd(object):
 			user_name = get_user_name(user_id)
 			if user_id not in gVar.admin_id:
 				gVar.admin_id.append(user_id)
-				write_config('Data','Op',str(gVar.admin_id).strip('[]').replace('\'',''))
+				config_write('Data','Op',str(gVar.admin_id).strip('[]').replace('\'',''))
 				printf(f'{LPURPLE}{user_name}({user_id}){RESET}已设置为管理员')
 			else:
 				warnf(f'{LPURPLE}{user_name}({user_id}){RESET}已经是管理员！')
@@ -343,7 +343,7 @@ class execute_cmd(object):
 			printf(f'请使用 {LCYAN}restart cqhttp{RESET} 重启CQHttp')
 
 	def reload(self,argv=''):
-		init_config()
+		config_init()
 		printf(f'重载配置文件成功！')
 
 	def reply(self,argv=''):
@@ -408,11 +408,11 @@ class execute_cmd(object):
 		elif re.search(r'show',argv):
 			if re.search(r'show\s+all',argv):
 				gVar.is_show_all_msg = True
-				write_config('Data','ShowAllMessage',gVar.is_show_all_msg)
+				config_write('Data','ShowAllMessage',gVar.is_show_all_msg)
 				printf(f'设置显示所有群信息成功')
 			elif re.search(r'show\s+at',argv):
 				gVar.is_show_all_msg = False
-				write_config('Data','ShowAllMessage',gVar.is_show_all_msg)
+				config_write('Data','ShowAllMessage',gVar.is_show_all_msg)
 				printf(f'设置仅显示@群信息成功')
 			else:
 				printf(f'请使用 {LCYAN}set show all/at{RESET} 设置显示所有群信息或者是仅@群信息')
@@ -420,23 +420,23 @@ class execute_cmd(object):
 			if re.search(r'(true|True)',argv): gVar.is_show_heartbeat = True
 			elif re.search(r'(false|False)',argv): gVar.is_show_heartbeat = False
 			else: gVar.is_show_heartbeat = not gVar.is_show_heartbeat
-			write_config('Data','ShowHeartBeat',gVar.is_show_heartbeat)
+			config_write('Data','ShowHeartBeat',gVar.is_show_heartbeat)
 			warnf('心跳包接收显示已开启') if gVar.is_show_heartbeat else warnf('心跳包接收显示已关闭')
 		elif re.search(r'image\s+color',argv):
 			if re.search(r'(true|True)',argv): gVar.is_image_color = True
 			elif re.search(r'(false|False)',argv): gVar.is_image_color = False
 			else: gVar.is_image_color = not gVar.is_image_color
-			write_config('Data','ImageColor',gVar.is_image_color)
+			config_write('Data','ImageColor',gVar.is_image_color)
 			printf('彩色字符画显示已开启') if gVar.is_image_color else printf('彩色字符画显示已关闭')
 		elif re.search(r'image\s+minsize',argv):
 			if re.search(r'minsize\s+(\d+)',argv):
 				gVar.min_image_width = sorted([10,int(re.search(r'minsize\s+(\d+)',argv).groups()[0]),gVar.max_image_width])[1]
-			write_config('Data','MinImageWidth',gVar.min_image_width)
+			config_write('Data','MinImageWidth',gVar.min_image_width)
 			printf(f'图片字符画最小宽度已设置为{gVar.min_image_width}')
 		elif re.search(r'image\s+maxsize',argv):
 			if re.search(r'size\s+(\d+)',argv):
 				gVar.max_image_width = sorted([gVar.min_image_width,int(re.search(r'size\s(\d+)',argv).groups()[0]),1000])[1]
-			write_config('Data','MaxImageWidth',gVar.max_image_width)
+			config_write('Data','MaxImageWidth',gVar.max_image_width)
 			printf(f'图片字符画最大宽度已设置为{gVar.max_image_width}')
 		elif re.search(r'image\s+size',argv):
 			if re.search(r'(\d+)[^\d](\d+)',argv):
@@ -447,14 +447,14 @@ class execute_cmd(object):
 				size = int(re.search(r'\s(\d+)',argv).groups()[0])
 				gVar.min_image_width = sorted([10,size,1000])[1]
 				gVar.max_image_width = gVar.min_image_width
-			write_config('Data','MinImageWidth',gVar.min_image_width)
-			write_config('Data','MaxImageWidth',gVar.max_image_width)
+			config_write('Data','MinImageWidth',gVar.min_image_width)
+			config_write('Data','MaxImageWidth',gVar.max_image_width)
 			printf(f'图片字符画大小已设置为({gVar.min_image_width}:{gVar.max_image_width})')
 		elif re.search(r'image',argv):
 			if re.search(r'(true|True)',argv): gVar.is_show_image = True
 			elif re.search(r'(false|False)',argv): gVar.is_show_image = False
 			else: gVar.is_show_image = not gVar.is_show_image
-			write_config('Data','ShowImage',gVar.is_show_image)
+			config_write('Data','ShowImage',gVar.is_show_image)
 			printf('图片字符画显示已开启') if gVar.is_show_image else printf('图片字符画显示已关闭')
 		else:
 			printf(f'==========设置列表==========')
@@ -468,7 +468,7 @@ class execute_cmd(object):
 
 	def slience(self,argv=''):
 		gVar.is_slience = not gVar.is_slience
-		write_config('Data','SlienceMode',gVar.is_slience)
+		config_write('Data','SlienceMode',gVar.is_slience)
 		warnf('静默模式已开启') if gVar.is_slience else warnf('静默模式已关闭')
 
 	def stop(self,argv=''):
