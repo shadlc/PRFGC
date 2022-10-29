@@ -210,7 +210,7 @@ class bilibili:
         if not name:
           name = '这个B\n站用户'
         if flag == None:
-          dynamic = get_latest_dynamic(uid, True)
+          dynamic = get_latest_dynamic(uid)
           if dynamic:
             name = dynamic[0]
             dynamic_id = dynamic[1]
@@ -533,10 +533,11 @@ def live_check(proxy=None):
   if not uids:
     return
   res = task(get_rooms_info_by_uids(uids, reqtype="web", proxies=proxy))
+  open('test.txt','w', encoding='utf-8').write(str(res))
   if not res:
     return
-  for uid, info in res.items():
-    status = int(info["live_status"]) % 2
+  for uid, live in res.items():
+    status = int(live["live_status"]) % 2
     if uid not in live_status:
       live_status[uid] = status
       continue
@@ -547,16 +548,16 @@ def live_check(proxy=None):
     if status:
       for owner_id in follow_list:
         if uid in follow_list[owner_id]:
-          info = follow_list[owner_id][uid]
-          if info['global_notice'] and info['live_notice'] and re.search(info['keyword'], info["title"]):
-            room_id = info["short_id"] if info["short_id"] else info["room_id"]
-            msg = f'{info["uname"]}开播啦~'
-            msg += f'\n{info["title"]}'
+          option = follow_list[owner_id][uid]
+          if info['global_notice'] and info['live_notice'] and re.search(info['keyword'], live["title"]):
+            room_id = live["short_id"] if live["short_id"] else live["room_id"]
+            msg = f'{live["uname"]}开播啦~'
+            msg += f'\n{live["title"]}'
             if cover:
-              msg += f'\n[CQ:image,file={info["cover_from_user"]}]'
+              msg += f'\n[CQ:image,file={live["cover_from_user"]}]'
             msg += f'https://live.bilibili.com/{room_id}'
             msg += f'\n========近期画面========'
-            msg += f'\n[CQ:image,file={info["keyframe"]}]'
+            msg += f'\n[CQ:image,file={live["keyframe"]}]'
             reply_back(owner_id, msg)
   time.sleep(10)
 
@@ -692,9 +693,6 @@ def get_new_dynamic(uid,proxy=None):
   return None
 
 def get_latest_dynamic(uid,proxy=None):
-  if uid not in past_dynamics:
-    init_dynamic(uid)
-    time.sleep(3)
   dynamics = task(grpc_get_user_dynamics(int(uid), timeout=10, proxy=proxy)).list
   if len(dynamics) > 0:
     dynamic_id = int(dynamics[0].extend.dyn_id_str)
