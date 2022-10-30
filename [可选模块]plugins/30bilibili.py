@@ -1,5 +1,5 @@
 #!/usr/bin/python
-#VUP杀群模块处理
+#哔哩哔哩模块处理
 
 import global_variable as gVar
 from ifunction import *
@@ -553,7 +553,7 @@ def live_check(proxy=None):
             room_id = live["short_id"] if live["short_id"] else live["room_id"]
             msg = f'{live["uname"]}开播啦~'
             msg += f'\n{live["title"]}'
-            if cover:
+            if live["cover_from_user"]:
               msg += f'\n[CQ:image,file={live["cover_from_user"]}]'
             msg += f'https://live.bilibili.com/{room_id}'
             msg += f'\n========近期画面========'
