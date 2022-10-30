@@ -439,8 +439,7 @@ class browser:
             # document.getElementsByClassName('dyn-header__author__face').forEach(v=>{ v.style.borderRadius = '100%'; });
             # document.getElementsByClassName('dyn-article__card').forEach(v=>{ v.style.maxHeight = 'fit-content'; });
             # document.getElementsByClassName('dyn-article__covers__item').forEach(v=>v.style.margin = '10px');
-            # const draws = document.getElementsByClassName('dyn-draw')[0];
-            # draws.children.forEach(p=>{ p.style.padding = '5px'; p.children.forEach(v=>{ v.style.margin = '3px';total = (parseInt(getComputedStyle(p).width) - 10); count = (p.children.length); if(count < 4) {size = (total / count - 6);}else if(count == 4){size = (total / 2 - 6)}else{size = total / 3 - 6} v.style.width = size.toString() + 'px'; })});
+            # document.getElementsByClassName('dyn-draw').forEach(v=>{ v.children.forEach(p=>{ p.style.padding = '5px'; p.children.forEach(v=>{ v.style.margin = '3px';total = (parseInt(getComputedStyle(p).width) - 10); count = (p.children.length); if(count < 4) {size = (total / count - 6);}else if(count == 4){size = (total / 2 - 6)}else{size = total / 3 - 6} v.style.width = size.toString() + 'px'; })})});
             content=
             # 去除打开app按钮
             "document.getElementsByClassName('m-dynamic-float-openapp').forEach(v=>v.remove());"
@@ -475,8 +474,7 @@ class browser:
             "document.getElementsByClassName('dyn-header__author__face').forEach(v=>{ v.style.borderRadius = '100%'; });"
             "document.getElementsByClassName('dyn-article__card').forEach(v=>{ v.style.maxHeight = 'fit-content'; });"
             "document.getElementsByClassName('dyn-article__covers__item').forEach(v=>v.style.margin = '10px');"
-            "const draws = document.getElementsByClassName('dyn-draw')[0];"
-            "draws.children.forEach(p=>{ p.style.padding = '5px'; p.children.forEach(v=>{ v.style.margin = '3px';total = (parseInt(getComputedStyle(p).width) - 10); count = (p.children.length); if(count < 4) {size = (total / count - 6);}else if(count == 4){size = (total / 2 - 6)}else{size = total / 3 - 6} v.style.width = size.toString() + 'px'; })});"
+            "document.getElementsByClassName('dyn-draw').forEach(v=>{ v.children.forEach(p=>{ p.style.padding = '5px'; p.children.forEach(v=>{ v.style.margin = '3px';total = (parseInt(getComputedStyle(p).width) - 10); count = (p.children.length); if(count < 4) {size = (total / count - 6);}else if(count == 4){size = (total / 2 - 6)}else{size = total / 3 - 6} v.style.width = size.toString() + 'px'; })})});"
         )
         card = await page.query_selector(".card-wrap")
         assert card
