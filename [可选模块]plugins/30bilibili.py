@@ -549,7 +549,7 @@ def live_check(proxy=None):
       for owner_id in follow_list:
         if uid in follow_list[owner_id]:
           option = follow_list[owner_id][uid]
-          if info['global_notice'] and info['live_notice'] and re.search(info['keyword'], live["title"]):
+          if option['global_notice'] and option['live_notice'] and re.search(option['keyword'], live["title"]):
             room_id = live["short_id"] if live["short_id"] else live["room_id"]
             msg = f'{live["uname"]}开播啦~'
             msg += f'\n{live["title"]}'
