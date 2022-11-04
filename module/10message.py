@@ -46,7 +46,7 @@ class message:
       elif auth<=3 and re.search(r'^帮助?$', self.rev_msg): self.help(auth)
       elif auth<=3 and re.search(r'^权限(等级)?$', self.rev_msg): self.authority(auth)
       elif auth<=1 and self.group_id and re.search(r'^(对接|监听|添加|增加|记录|删除|取消|移除)(本群|此群|该群|这个群|这群|群)$', self.rev_msg): self.connect()
-      elif auth<=1 and re.search(r'^(增加|添加|删除|取消)?管理员\s?[0-9]+', self.rev_msg): self.admin()
+      elif auth<=1 and re.search(r'^(增加|添加|删除|取消)?\s?管理员\s?[0-9]+', self.rev_msg): self.admin()
       elif auth<=1 and re.search(r'^(撤回|闭嘴|嘘)(！|，)?(懂？)?$', self.rev_msg): self.recall() 
       elif auth<=1 and re.search(r'^重启$', self.rev_msg): self.restart()
       elif auth<=2 and re.search(r'^计时[0-9]+', self.rev_msg): self.delay()
@@ -93,8 +93,8 @@ class message:
     reply(self.rev,msg)
 
   def admin(self):
-    if re.search(r'^管理员', self.rev_msg):
-      number = re.search(r'^(增加|添加)管理员\s?([0-9]+)', self.rev_msg).groups()[1]
+    if re.search(r'^(增加|添加)\s?管理员', self.rev_msg):
+      number = re.search(r'^(增加|添加)\s?管理员\s?([0-9]+)', self.rev_msg).groups()[1]
       if number not in gVar.admin_id:
         gVar.admin_id.append(number)
         config_write('Data','Op',str(gVar.admin_id).strip('[]').replace('\'',''))
@@ -104,7 +104,7 @@ class message:
         warnf(f'{LPURPLE}{user_name}({user_id}){RESET}已经是管理员！')
         msg = f'{get_user_name(number)}({number})已经是管理员！'
 
-    elif re.search(r'^(删除|取消)管理员', self.rev_msg):
+    elif re.search(r'^(删除|取消)\s?管理员', self.rev_msg):
       number = re.search(r'^(删除|取消)管理员\s?([0-9]+)', self.rev_msg).groups()[1]
       if number in gVar.admin_id:
         gVar.admin_id.remove(number)
