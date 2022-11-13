@@ -8,10 +8,11 @@ import time
 
 import global_variable as gVar
 
-def request_to_json(msg):
+def request_to_json(request):
 	try:
-		return json.loads(msg)
+		return json.loads(request.split("\r\n")[-1])
 	except:
+		errorf("解析请求体出错！")
 		return ""
 
 def get_request(url):
@@ -19,9 +20,10 @@ def get_request(url):
 		get_url = 'http://' + gVar.cqhttp_url + ':' + gVar.get_port + url
 		gVar.request_list.append(get_url)
 		r = requests.get(get_url)
-		rev_json = json.loads(r.text)
+		rev_json = request_to_json(r.text)
 		return rev_json
 	except:
+		errorf("发送请求出错！")
 		return {}
 
 def connect_cqhttp():
