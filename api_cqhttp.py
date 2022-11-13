@@ -9,9 +9,10 @@ import time
 import global_variable as gVar
 
 def request_to_json(msg):
-	for i in range(len(msg)):
-		if msg[i]=='{' or msg[i]=="[":
-			return json.loads(msg[i:])
+	try:
+		return json.loads(msg)
+	except:
+		return ""
 
 def get_request(url):
 	try:

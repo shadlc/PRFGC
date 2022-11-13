@@ -642,7 +642,7 @@ def fans_check(check_day=True,proxy=None):
               elif diff > 25 or diff > fans/100:
                 msg += f'一点小失误...(￣﹃￣)'
               else:
-                msg += f'，统计学上来说这很正常'
+                msg += f'统计学上来说这很正常'
             else: continue
             update_follow_list_info(uid, {'fans': fans})
             reply_back(owner_id, msg)
