@@ -77,7 +77,7 @@ class chat_log:
     if re.search(r'(https?://|词云)', self.rev_msg): 
       return
     else:
-      msg = re.sub(r'(\[|【|{)\S+(\]|】|})', '', self.rev_msg)
+      msg = re.sub(r'((\[|【|{)\S+(\]|】|})|\n|\s)', '', self.rev_msg)
       chat_log_add(self.owner_id, msg)
 
   def wordcloud(self):
@@ -174,13 +174,19 @@ def data_save(owner_id, one_config):
 
 def chat_log_add(owner_id, msg):
   data_file = f'{chat_log_dir}/{owner_id}.log'
+  if not os.path.exists(data_file):
+    open(data_file, mode='a', encoding='utf-8').write('')
+  last_time = 0
   with open(data_file, mode='r', encoding='utf-8') as f:
     while temp := f.readline():
       last_time = temp
       f.readline()
-  if time.mktime(datetime.date.today().timetuple()) > int(last_time):
-    msg = f'\n{str(int(time.time()))}\n{msg}'
-  open(data_file, mode='a', encoding='utf-8').write(msg.replace('\n','').replace(' ',''))
+  now = int(time.mktime(datetime.date.today().timetuple()))
+  if now > int(last_time):
+    msg = f'{str(now)}\n{msg}'
+    if last_time:
+      msg = '\n' + msg
+  open(data_file, mode='a', encoding='utf-8').write(msg)
 
 def chat_log_read(owner_id, type='all'):
   data_file = f'{chat_log_dir}/{owner_id}.log'
