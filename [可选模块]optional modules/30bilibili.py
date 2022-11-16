@@ -531,7 +531,6 @@ def live_check(proxy=None):
   if not uids:
     return
   res = task(get_rooms_info_by_uids(uids, reqtype="web", proxies=proxy))
-  open('test.txt','w', encoding='utf-8').write(str(res))
   if not res:
     return
   for uid, live in res.items():

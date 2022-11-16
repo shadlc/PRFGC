@@ -17,7 +17,7 @@ class execute_msg(object):
 			for mod in gVar.modules:
 				if mod(rev,auth).success:
 					break
-		except Exception as e:
+		except:
 			if gVar.is_debug:
 				reply(rev,f'{QA_get("!!致命错误")}{traceback.format_exc()}')
 			else:

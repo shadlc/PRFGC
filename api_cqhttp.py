@@ -12,7 +12,7 @@ def request_to_json(request):
 	try:
 		return json.loads(request.split("\r\n")[-1])
 	except:
-		errorf("解析请求体出错！")
+		print("解析请求体出错！")
 		return ""
 
 def get_request(url):
@@ -23,7 +23,7 @@ def get_request(url):
 		rev_json = request_to_json(r.text)
 		return rev_json
 	except:
-		errorf("发送请求出错！")
+		print("发送请求出错！")
 		return {}
 
 def connect_cqhttp():
@@ -45,11 +45,17 @@ def receive_msg():
 	server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 	server.bind((gVar.cqhttp_url, int(gVar.listening_port)))
 	server.listen(100)
-	header = 'HTTP/1.1 200 OK\n\n'
+	header = 'HTTP/1.1 200 OK\r\n\r\n'
 	client, address = server.accept()
-	request = client.recv(32767).decode(encoding='utf-8')
+	respond = bytes()
+	while True:
+	   data = client.recv(1024)
+	   respond += data
+	   if len(data) < 1024 or data[-1] == 10:
+	   	break
+
 	client.sendall(header.encode(encoding='utf-8'))
-	rev_json = request_to_json(request)
+	rev_json = request_to_json(respond.decode(encoding='utf-8'))
 	server.close()
 	return rev_json
 
