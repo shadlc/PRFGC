@@ -180,7 +180,7 @@ def chat_log_add(owner_id, msg):
       f.readline()
   if time.mktime(datetime.date.today().timetuple()) > int(last_time):
     msg = f'\n{str(int(time.time()))}\n{msg}'
-  open(data_file, mode='a', encoding='utf-8').write(msg)
+  open(data_file, mode='a', encoding='utf-8').write(msg.replace('\n','').replace(' ',''))
 
 def chat_log_read(owner_id, type='all'):
   data_file = f'{chat_log_dir}/{owner_id}.log'
