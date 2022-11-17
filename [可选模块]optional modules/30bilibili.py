@@ -680,7 +680,7 @@ def get_new_dynamic(uid,proxy=None):
           break
     dynamic_type = dynamics[index].card_type
     author_name = dynamics[index].modules[0].module_author.author.name
-    text = dynamics[index].extend.orig_desc[0].text
+    text = dynamics[index].extend.orig_desc[0].text if len(dynamics[index].extend.orig_desc) else ''
     if str(dynamic_id) not in past_dynamics[uid]:
       past_dynamics[uid].append(str(dynamic_id))
       image = task(Browser.get_dynamic_screenshot(dynamic_id))

@@ -53,90 +53,106 @@ class chat_log:
       config[self.owner_id] = {'wordcloud': False, 'icon': 'fas fa-square', 'palette': 'cartocolors.qualitative.Pastel_10”'}
     self.config = config[self.owner_id]
 
-    if self.config['wordcloud']: self.record()
+    if self.config['wordcloud']: self.wordcloud_record()
     #群聊@消息以及私聊消息触发
     if not self.group_id or gVar.at_info in self.rev_msg:
       if self.group_id: self.rev_msg = self.rev_msg.replace(gVar.at_info,'').strip()
       if auth<=2 and re.search(r'^消息功能$', self.rev_msg): self.help(auth)
-      elif auth<=2 and re.search(r'词云', self.rev_msg): self.wordcloud()
+      elif auth<=2 and re.search(r'词云', self.rev_msg): self.wordcloud(auth)
+      elif auth<=2 and self.rev_msg == '': self.record()
       else: self.success = False
     else: self.success = False
 
   def help(self, auth):
     msg = f'{module_name}%HELP%\n'
     if auth<=2:
-      msg += '\n词云 (时间范围) |生成你或此群的词云'
+      msg += '\n(打开|关闭)词云 |打开或关闭词云记录(默认关闭)'
+      msg += '\n词云 (时间范围) |生成时间范围内你或此群的词云'
+      msg += '\n词云形状 [形状代码] |更改词云形状'
+      msg += '\n词云配色 [配色代码] |更改词云配色'
+      msg += '\n小本本'
       msg += '\n仅@不添加任何字符 |将你上一条消息记录在文档中'
     elif auth<=3:
       msg += '\n无帮助'
 
     reply(self.rev,msg)
 
-
   def record(self):
+    msg = '未检测到你说过的话~'
+    history_msg = get_group_msg_history({'group_id':self.group_id})
+    for one_msg in history_msg[::-1][1:]:
+      if one_msg['sender']['user_id'] == self.user_id:
+        msg = one_msg['raw_message']
+        break
+    reply(self.rev, msg)
+
+  def wordcloud_record(self):
     if re.search(r'(https?://|词云)', self.rev_msg): 
       return
     else:
       msg = re.sub(r'((\[|【|{)\S+(\]|】|})|\n|\s)', '', self.rev_msg)
       chat_log_add(self.owner_id, msg)
 
-  def wordcloud(self):
+  def wordcloud(self, auth):
     if re.search(r'(开启|启用|打开|记录|启动|关闭|禁用|取消)', self.rev_msg):
-      self.wordcloud_switch()
-    elif re.search(r'(图标|蒙版|轮廓|形状|外形)', self.rev_msg):
+      if auth <= 1:
+        self.wordcloud_switch()
+      else:
+        msg = '你没有此操作的权限！'
+    elif re.search(r'(图标|图案|蒙版|轮廓|形状|外形)', self.rev_msg):
       self.wordcloud_icon()
-    elif re.search(r'(主题|颜色|色彩|方案)', self.rev_msg):
+    elif re.search(r'(主题|颜色|色彩|方案|配色)', self.rev_msg):
       self.wordcloud_palette()
     else:
       chat_log_file = f'{chat_log_dir}/{self.owner_id}.log'
       if self.config['wordcloud'] and os.path.exists(chat_log_file):
-        if re.search(r'(今天)', self.rev_msg):
-          msg = '正在生成今天词云...'
+        if re.search(r'(今天|今日)', self.rev_msg):
+          msg = '正在生成今日词云...'
           text = chat_log_read(self.owner_id, 'today')
-        elif re.search(r'(昨天)', self.rev_msg):
+        elif re.search(r'(昨天|昨日)', self.rev_msg):
           msg = '正在生成昨天词云...'
           text = chat_log_read(self.owner_id, 'yesterday')
-        elif re.search(r'(前天)', self.rev_msg):
+        elif re.search(r'(前天|前日)', self.rev_msg):
           msg = '正在生成前天词云...'
           text = chat_log_read(self.owner_id, 'before_yesterday')
-        elif re.search(r'(本周|这周|此周|这礼拜)', self.rev_msg):
+        elif re.search(r'(本周|这周|此周|这个?礼拜|这个?星期)', self.rev_msg):
           msg = '正在生成本周词云...'
           text = chat_log_read(self.owner_id, 'this_week')
-        elif re.search(r'(上周|上个礼拜)', self.rev_msg):
+        elif re.search(r'(上周|上个?礼拜|上个?星期)', self.rev_msg):
           msg = '正在生成上周词云...'
           text = chat_log_read(self.owner_id, 'last_week')
         elif re.search(r'(本月|这月|次月|这个月)', self.rev_msg):
           msg = '正在生成本月词云...'
           text = chat_log_read(self.owner_id, 'this_month')
-        elif re.search(r'(上个月)', self.rev_msg):
+        elif re.search(r'(上个?月)', self.rev_msg):
           msg = '正在生成上个月词云...'
           text = chat_log_read(self.owner_id, 'last_month')
-        elif re.search(r'(今年|这年|本年|这一年)', self.rev_msg):
+        elif re.search(r'(今年|本年|此年|这一?年)', self.rev_msg):
           msg = '正在生成今年词云...'
           text = chat_log_read(self.owner_id, 'this_year')
-        elif re.search(r'(去年)', self.rev_msg):
+        elif re.search(r'(去年|上个?年)', self.rev_msg):
           msg = '正在生成去年词云...'
           text = chat_log_read(self.owner_id, 'last_year')
         else:
-          msg = '正在生成词云...'
+          msg = '正在生成历史词云...'
           text = chat_log_read(self.owner_id)
-        if text:
-          reply(self.rev, msg)
-        else:
-          msg = '还没有消息记录哦~'
+        if not text:
+          msg = '没有消息记录哦~'
           reply(self.rev, msg)
           return
+        if len(text) > 500:
+          msg += '\n数据较多，请耐心等待~'
+        reply(self.rev, msg)
         try:
           generate_wordcloud(self.config, text)
           msg = '[CQ:image,file=wordcloud.png]'
         except:
           msg = '生成错误！\n' + get_error(traceback.format_exc())
-        time.sleep(1)
       elif not self.config['wordcloud']:
         msg = '请先开启开启词云记录哦~'
       else:
-        msg = '还没有任何词云记录哦~'
-      reply(self.rev, msg)
+        msg = '没有任何词云记录哦~'
+    reply(self.rev, msg)
 
   def wordcloud_switch(self):
     if re.search(r'(开启|启用|打开|记录|启动)', self.rev_msg):
@@ -153,9 +169,9 @@ class chat_log:
       icon = re.search(r'#(\S+\s\S+)', self.rev_msg).groups()[0]
       self.config['icon'] = icon
       data_save(self.owner_id, self.config)
-      msg = '词云轮廓设置成功！'
+      msg = '词云形状设置成功！'
     else:
-      msg = '请使用[#图标名]来设置词云的形状,例如：“词云形状#fas fa-square”\n形状可以在https://fontawesome.com/icons获取'
+      msg = '请使用[#形状代码]来设置词云的形状,例如：“词云形状#fas fa-square”\n形状代码可以在https://fontawesome.com/icons获取'
     reply(self.rev,msg)
 
   def wordcloud_palette(self):
@@ -163,9 +179,9 @@ class chat_log:
       palette = re.search(r'#(\S+)', self.rev_msg).groups()[0]
       self.config['palette'] = palette
       data_save(self.owner_id, self.config)
-      msg = '词云主题设置成功！'
+      msg = '词云配色设置成功！'
     else:
-      msg = '请使用[#主题]来设置词云的颜色主题,例如：“词云主题#cartocolors.qualitative.Pastel_10”\n主题可以在https://jiffyclub.github.io/palettable获取'
+      msg = '请使用[#配色代码]来设置词云的配色主题,例如：“词云主题#cartocolors.qualitative.Pastel_10”\n配色代码可以在https://jiffyclub.github.io/palettable获取'
     reply(self.rev,msg)
 
 def data_save(owner_id, one_config):
@@ -179,8 +195,8 @@ def chat_log_add(owner_id, msg):
   last_time = 0
   with open(data_file, mode='r', encoding='utf-8') as f:
     while temp := f.readline():
-      last_time = temp
-      f.readline()
+      if temp.strip().isdigit():
+        last_time = temp.strip()
   now = int(time.mktime(datetime.date.today().timetuple()))
   if now > int(last_time):
     msg = f'{str(now)}\n{msg}'
@@ -192,59 +208,63 @@ def chat_log_read(owner_id, type='all'):
   data_file = f'{chat_log_dir}/{owner_id}.log'
   log = {}
   with open(data_file, mode='r', encoding='utf-8') as f:
-    timestamp = f.readline()[:-1]
-    while timestamp:
-      log[timestamp] = f.readline()[:-1]
-      timestamp = f.readline()[:-1]
+    line = f.readline().strip()
+    timestamp = line if line.isdigit() else 0
+    while line:
+      if line.isdigit():
+        timestamp = line
+      elif timestamp != 0:
+        log[timestamp] = log[timestamp] + line if timestamp in log else line
+      line = f.readline().strip()
   text = ''
   today = datetime.date.today()
   if type == 'today':
     for timestamp,line in log.items():
-      if time.mktime(today.timetuple()) < int(timestamp):
+      if time.mktime(today.timetuple()) <= int(timestamp):
         text += line
   elif type == 'yesterday':
     yesterday_start_time = time.mktime((today - datetime.timedelta(days=1)).timetuple())
     for timestamp,line in log.items():
-      if yesterday_start_time < int(timestamp) < time.mktime(today.timetuple()):
+      if yesterday_start_time <= int(timestamp) < time.mktime(today.timetuple()):
         text += line
   elif type == 'before_yesterday':
     yesterday_start_time = time.mktime((today - datetime.timedelta(days=1)).timetuple())
     before_yesterday_start_time = time.mktime((today - datetime.timedelta(days=2)).timetuple())
     for timestamp,line in log.items():
-      if before_yesterday_start_time < int(timestamp) < yesterday_start_time:
+      if before_yesterday_start_time <= int(timestamp) < yesterday_start_time:
         text += line
   elif type == 'this_week':
     this_week_start_time = time.mktime((today - datetime.timedelta(days=today.weekday())).timetuple())
     for timestamp,line in log.items():
-      if this_week_start_time < int(timestamp):
+      if this_week_start_time <= int(timestamp):
         text += line
   elif type == 'last_week':
     this_week_start_time = time.mktime((today - datetime.timedelta(days=today.weekday())).timetuple())
     last_week_start_time = time.mktime((today - datetime.timedelta(days=today.weekday() + 7)).timetuple())
     for timestamp,line in log.items():
-      if last_week_start_time < int(timestamp) < this_week_start_time:
+      if last_week_start_time <= int(timestamp) < this_week_start_time:
         text += line
   elif type == 'this_month':
     this_month_start_time = time.mktime((datetime.datetime(today.year, today.month, 1)).timetuple())
     for timestamp,line in log.items():
-      if this_month_start_time < int(timestamp):
+      if this_month_start_time <= int(timestamp):
         text += line
   elif type == 'last_month':
     this_month_start_time = time.mktime((datetime.datetime(today.year, today.month, 1)).timetuple())
     last_month_start_time = time.mktime((datetime.datetime(today.year, today.month, 1) - datetime.timedelta(30)).timetuple())
     for timestamp,line in log.items():
-      if last_month_start_time < int(timestamp) < this_month_start_time:
+      if last_month_start_time <= int(timestamp) < this_month_start_time:
         text += line
   elif type == 'this_year':
     this_year_start_time = time.mktime((datetime.datetime(today.year, 1, 1)).timetuple())
     for timestamp,line in log.items():
-      if this_year_start_time < int(timestamp):
+      if this_year_start_time <= int(timestamp):
         text += line
   elif type == 'last_year':
     this_year_start_time = time.mktime((datetime.datetime(today.year, 1, 1)).timetuple())
     last_year_start_time = time.mktime(datetime.datetime(today.year - 1, 1, 1).timetuple())
     for timestamp,line in log.items():
-      if last_year_start_time < int(timestamp) < this_year_start_time:
+      if last_year_start_time <= int(timestamp) < this_year_start_time:
         text += line
   else:
     for line in log.values():

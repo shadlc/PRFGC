@@ -234,6 +234,11 @@ def reply_id(type,id,msg,force=False):
       return send_msg({'msg_type':'private','number':id,'msg':msg})
 
 def reply_back(owner_id, msg):
+  """
+  对reply_id方法的封装，对owner_id发送消息
+  :param owner_id: 用户识别ID
+  :param msg: 发送的消息内容
+  """
   if owner_id[:1] == 'u':
     reply_id('private',owner_id[1:], msg)
   else:

@@ -190,7 +190,7 @@ class execute_cmd(object):
 			msg_id = re.search(r'(\d+)$',argv).groups()[0]
 			if ('g' + msg_id) in gVar.data:
 				printf(f'群{LPURPLE}{get_group_name(str(msg_id))}({msg_id}){RESET}中的历史消息：')
-				past_msg = get_group_msg_history({'group_id':msg_id})['data']['messages']
+				past_msg = get_group_msg_history({'group_id':msg_id})
 				for i in range(len(past_msg)):
 					msg_time = time.strftime("%m-%d %H:%M:%S", time.localtime(past_msg[i]['time']))
 					msg_id = past_msg[i]['message_id']

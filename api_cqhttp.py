@@ -129,7 +129,7 @@ def get_group_msg_history(resp_dict):
 		url = '/get_group_msg_history?group_id=' + str(group_id) + '&message_seq=' + str(message_seq)
 	else:
 		url = '/get_group_msg_history?group_id=' + str(group_id)
-	return get_request(url)
+	return get_request(url)['data']['messages']
 
 def get_stranger_info(resp_dict):
 	user_id = resp_dict['user_id']  # 目标QQ号
