@@ -36,16 +36,14 @@ class dice:
     if self.data and not hasattr(self.data,'sp_dice'):
       self.data.sp_dice = [1,2,3,4,5,6]
 
-    #群聊非@消息触发
-    if self.group_id:
-      if auth<=3 and re.search(r'^\.rhelp$', self.rev_msg): self.dice_rhelp(auth)
-      elif auth<=3 and re.search(r'^\.r$', self.rev_msg): self.dice_r()
-      elif auth<=3 and re.search(r'^\.r\s?([0-9]+)?d\s?([0-9]+)?', self.rev_msg): self.dice_rd()
-      elif auth<=3 and re.search(r'^\.ra', self.rev_msg): self.dice_ra()
-      elif auth<=3 and re.search(r'^\.sr([0-9]+)?d', self.rev_msg): self.dice_srd()
-      elif auth<=3 and re.search(r'^\.srv$', self.rev_msg): self.dice_srv()
-      elif auth<=3 and re.search(r'^\.sr', self.rev_msg): self.dice_sr()
-      else: self.success = False
+    #所有消息触发
+    if auth<=3 and re.search(r'^\.rhelp$', self.rev_msg): self.dice_rhelp(auth)
+    elif auth<=3 and re.search(r'^\.r$', self.rev_msg): self.dice_r()
+    elif auth<=3 and re.search(r'^\.r\s?([0-9]+)?d\s?([0-9]+)?', self.rev_msg): self.dice_rd()
+    elif auth<=3 and re.search(r'^\.ra', self.rev_msg): self.dice_ra()
+    elif auth<=3 and re.search(r'^\.sr([0-9]+)?d', self.rev_msg): self.dice_srd()
+    elif auth<=3 and re.search(r'^\.srv$', self.rev_msg): self.dice_srv()
+    elif auth<=3 and re.search(r'^\.sr', self.rev_msg): self.dice_sr()
     else: self.success = False
 
   def dice_rhelp(self, auth):

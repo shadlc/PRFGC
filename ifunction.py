@@ -84,19 +84,18 @@ def config_init():
     config_read(config)
 
 def import_json(file):
-  try:
-    if not os.path.exists(file):
-      open(file,'w', encoding='utf-8').write("{}")
-    return json.load(open(file, 'r', encoding='utf-8'))
-  except:
-    errorf('导入配置文件失败！')
-    return None
+  content = '{}'
+  if not os.path.exists(file):
+    open(file,'w', encoding='utf-8').write("{}")
+  if temp := open(file, 'r', encoding='utf-8').read():
+    content = temp
+  return json.loads(content)
 
 def save_json(file_name, data):
   try:
     json.dump(data,open(file_name, 'w',encoding='utf-8'),indent=2,ensure_ascii=False)
   except:
-    errorf('写入数据失败！')
+    errorf('写入Json文件失败！')
   
 
 def calc_size(bytes):
@@ -151,29 +150,32 @@ def msg_img2char(msg):
   :param color: 是否渲染颜色
   :return: 转化为字符画的消息
   """
-  while re.search(r'\[CQ:image.*?\]',msg) and '的消息' in msg:
-    image_ascii =  list(".:~+o0O*#%@")
-    unit = (256+1)/len(image_ascii)
-    url = re.search(r'\.image,url=(.*)]',msg).groups()[0]
-    img = Image.open(io.BytesIO(requests.get(url).content)).convert('RGB')
-    w,h = img.size
-    ratio = h/float(w)
-    tartget_w = sorted([gVar.min_image_width,w,gVar.max_image_width])[1]
-    tartget_h = int(tartget_w * ratio * 0.5)
-    img = img.resize((tartget_w,tartget_h))
-    pixels = img.getdata()
-    char = ''
-    row = 0
-    for i in pixels:
-      pixel_gray = (i[0]*38 + i[1]*75 + i[2]*15) >> 7
-      single_char = image_ascii[int(pixel_gray//unit)]
-      if gVar.is_image_color: char += char_add_color(single_char,i)
-      else: char += single_char
-      row += 1
-      if row >= tartget_w:
-        row = 0
-        char += '\n'
-    msg = msg.replace(re.search(r'(\[CQ:image.*?\])',msg).groups()[0],'\n'+ char)
+  while re.search(r'\[CQ:image.*url=(.*)\]',msg) and '的消息' in msg:
+    try:
+      image_ascii =  list(".:~+o0O*#%@")
+      unit = (256+1)/len(image_ascii)
+      url = re.search(r'\[CQ:image.*url=(.*)\]',msg).groups()[0]
+      img = Image.open(io.BytesIO(requests.get(url).content)).convert('RGB')
+      w,h = img.size
+      ratio = h/float(w)
+      tartget_w = sorted([gVar.min_image_width,w,gVar.max_image_width])[1]
+      tartget_h = int(tartget_w * ratio * 0.5)
+      img = img.resize((tartget_w,tartget_h))
+      pixels = img.getdata()
+      char = ''
+      row = 0
+      for i in pixels:
+        pixel_gray = (i[0]*38 + i[1]*75 + i[2]*15) >> 7
+        single_char = image_ascii[int(pixel_gray//unit)]
+        if gVar.is_image_color: char += char_add_color(single_char,i)
+        else: char += single_char
+        row += 1
+        if row >= tartget_w:
+          row = 0
+          char += '\n'
+      msg = msg.replace(re.search(r'(\[CQ:image.*?\])',msg).groups()[0],'\n'+ char)
+    except:
+      return msg
   return msg
 
 def status_ok(respond):
@@ -204,16 +206,17 @@ def reply(rev,msg,force=False):
   :return: 发送消息后返回的json信息
   """
   msg = handle_placehold(str(msg),gVar.placehold_dict)
+  simple_msg = re.sub(r'\[CQ:image,file=base64.*\]', r'[CQ:image,file=Base64Image]', msg)
   if rev['post_type'] == 'message' and(not gVar.is_slience or force):
     if rev['message_type'] == 'group':
       group_id = rev['group_id']
       group_name = get_group_name(group_id)
-      printf(f'{LGREEN}[SEND]{RESET}向群{LPURPLE}{group_name}({group_id}){RESET}发送消息：{msg}')
+      printf(f'{LGREEN}[SEND]{RESET}向群{LPURPLE}{group_name}({group_id}){RESET}发送消息：{simple_msg}')
       return send_msg({'msg_type':'group','number':group_id,'msg':msg})
     else:
       user_id = rev['user_id']
       user_name = get_user_name(user_id)
-      printf(f'{LGREEN}[SEND]{RESET}向{LPURPLE}{user_name}({user_id}){RESET}发送消息：{msg}')
+      printf(f'{LGREEN}[SEND]{RESET}向{LPURPLE}{user_name}({user_id}){RESET}发送消息：{simple_msg}')
       return send_msg({'msg_type':'private','number':user_id,'msg':msg})
 
 def reply_id(type,id,msg,force=False):
@@ -225,12 +228,13 @@ def reply_id(type,id,msg,force=False):
   :return: 发送消息后返回的json信息
   """
   msg = handle_placehold(str(msg),gVar.placehold_dict)
+  simple_msg = re.sub(r'\[CQ:image,file=base64.*\]', '[CQ:image,file=Base64Image]', msg)
   if (not gVar.is_slience or force):
     if type == 'group':
-      printf(f'{LGREEN}[SEND]{RESET}向群{LPURPLE}{get_group_name(id)}({id}){RESET}发送消息：{msg}')
+      printf(f'{LGREEN}[SEND]{RESET}向群{LPURPLE}{get_group_name(id)}({id}){RESET}发送消息：{simple_msg}')
       return send_msg({'msg_type':'group','number':id,'msg':msg})
     else:
-      printf(f'{LGREEN}[SEND]{RESET}向{LPURPLE}{get_user_name(id)}({id}){RESET}发送消息：{msg}')
+      printf(f'{LGREEN}[SEND]{RESET}向{LPURPLE}{get_user_name(id)}({id}){RESET}发送消息：{simple_msg}')
       return send_msg({'msg_type':'private','number':id,'msg':msg})
 
 def reply_back(owner_id, msg):
@@ -253,8 +257,35 @@ def quick_reply(rev,msg):
   """
   msg = handle_placehold(str(msg),gVar.placehold_dict)
   if rev['post_type'] == 'message':
-    gVar.self_message.append({'message':msg,'message_id':0,'message_type':rev['message_type'],'user_id':gVar.self_id,'time':time.time()})
+    gVar.self_message.append({'message':msg,'message_id':'查阅CQHttp端','message_type':rev['message_type'],'user_id':gVar.self_id,'time':time.time()})
     return handle_quick_operation({'context':rev,'operation':{'reply':msg}})
+
+def read_forward_msg(msg_id):
+  """
+  获取转发消息内容
+  :param msg_id: 转发消息ID
+  :return: 转发消息内容
+  """
+  if msg_id == 0:
+    return None
+  result = get_forward_msg({"message_id":msg_id})
+  if 'data' in result and result['data']:
+    return result['data']['messages']
+  else:
+    return None
+
+def send_forward_msg(group_id, node):
+  """
+  发送转发消息
+  :param group_id: 发送到群ID
+  :param node: 转发消息内容物
+  :return: 发送消息后返回的json信息
+  """
+  data = {'group_id': group_id, 'messages': node}
+  result = post_request("/send_group_forward_msg", data)
+  if 'status' in result and result['status'] == 'ok':
+    gVar.self_message.append(get_msg({'message_id':result['data']['message_id']})['data'])
+  return result
 
 def reply_add(rev,accept,msg):
   """

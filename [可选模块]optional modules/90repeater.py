@@ -40,6 +40,10 @@ class repeater:
       config[self.owner_id] = {'repeat': True}
     self.config = config[self.owner_id]
 
+    #预处理消息（图片消息链接处理）
+    if 'message' in self.rev:
+      self.rev_msg = re.sub(r',url=.*?]',']', self.rev_msg)
+
     #群聊@消息以及私聊消息触发
     if not self.group_id or gVar.at_info in self.rev_msg:
       if self.group_id: self.rev_msg = self.rev_msg.replace(gVar.at_info,'').strip()
@@ -47,7 +51,7 @@ class repeater:
       else: self.success = False
     #群聊非@消息触发
     elif self.group_id and not gVar.at_info in self.rev_msg:
-      if auth<=3 and self.config['repeat'] and str(self.data.past_message).count(f"'message': '{self.rev_msg}'")>1: self.repeat()
+      if auth<=3 and self.config['repeat'] and re.sub(r',url=.*?]',']', str(self.data.past_message)).count(f"'message': '{self.rev_msg}")>1: self.repeat()
       else: self.success = False
     else: self.success = False
 
@@ -57,7 +61,7 @@ class repeater:
       printf('短时间内已复读过，不再进行复读')
       self.success = False
     else:
-      repeat_count = str(self.data.past_message).count(f"'message': '{self.rev_msg}'")
+      repeat_count = re.sub(r',url=.*?]',']', str(self.data.past_message)).count(f"'message': '{self.rev_msg}'")
       printf('本次复读概率为' + str(round((5/(11-repeat_count))*100,2)) + '%')
       if random.randint(0,10-repeat_count) < 5:
         self.data.past_message[-1]['message'] += 'Already_Repeat'

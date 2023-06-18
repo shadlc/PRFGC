@@ -112,12 +112,12 @@ class notice:
       msg = QA_get('!!自我介绍')
       reply_id("group",self.group_id,msg)
     else:
-      msg = self.user_name + QA_get('!!群友呼叫')
+      msg = self.user_name + QA_get('!!欢迎新人')
       reply_id("group",self.group_id,msg)
 
   def group_ban(self):
     duration = self.rev['duration']
-    if duration: duration = duration + '秒' if int(duration) < 268435455 else '永久'
+    if duration: duration = str(duration) + '秒' if int(duration) < 268435455 else '永久'
     if self.user_id == 0:
       if self.sub_type == 'ban':
         printf(f'{LYELLOW}[NOTICE]{RESET}群{LPURPLE}{self.group_name}({self.group_id}){RESET}内{LPURPLE}{self.operator_name}({self.operator_id}){RESET}设置了{LYELLOW}{duration}{RESET}的全员禁言')
@@ -125,7 +125,7 @@ class notice:
         printf(f'{LYELLOW}[NOTICE]{RESET}群{LPURPLE}{self.group_name}({self.group_id}){RESET}内{LPURPLE}{self.operator_name}({self.operator_id}){RESET}解除了全员禁言')
     else:
       if self.sub_type == 'ban':
-        printf(f'{LYELLOW}[NOTICE]{RESET}群{LPURPLE}{self.group_name}({self.group_id}){RESET}内{LPURPLE}{self.operator_name}({self.operator_id}){RESET}为{LPURPLE}{self.user_name}({self.user_id}){RESET}设置了{LYELLOW}{duration}秒{RESET}的禁言')
+        printf(f'{LYELLOW}[NOTICE]{RESET}群{LPURPLE}{self.group_name}({self.group_id}){RESET}内{LPURPLE}{self.operator_name}({self.operator_id}){RESET}为{LPURPLE}{self.user_name}({self.user_id}){RESET}设置了{LYELLOW}{duration}{RESET}的禁言')
       elif self.sub_type == 'lift_ban':
         printf(f'{LYELLOW}[NOTICE]{RESET}群{LPURPLE}{self.group_name}({self.group_id}){RESET}内{LPURPLE}{self.operator_name}({self.operator_id}){RESET}解除了{LPURPLE}{self.user_name}({self.user_id}){RESET}的禁言')
 

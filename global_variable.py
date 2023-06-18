@@ -14,6 +14,7 @@ is_restart = True
 is_show_image = True
 is_image_color = True
 
+func = {}
 modules_name = []
 modules = []
 admin_id = []
@@ -52,7 +53,6 @@ first_start_info = f'''
 使用 {LCYAN}group main 群号{RESET} 设置主对接群
 使用 {LCYAN}op 用户QQ{RESET} 设置管理员
 使用 {LCYAN}info{RESET} 查看程序运行状态和核心信息
-使用 {LCYAN}help{RESET} 查看程序控制台帮助
 某些设置可以打开{LPURPLE}config.ini{RESET}进行修改
 ==================================================
 '''

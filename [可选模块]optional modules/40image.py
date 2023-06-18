@@ -21,8 +21,8 @@ data_file = 'data/image_data.json'
 config = import_json(data_file)
 saucenao_api = ''
 api_url = config['api_url'] if 'api_url' in config else 'http://127.0.0.1:10777/api/'
-setu_pattern = re.compile(r'(张|要|来|发|看|给|有没有|色|瑟|涩|se)\S*(图|色|瑟|涩|se|好看|好康|可爱)')
-not_enough_pattern = re.compile(r'(完全|根本|一点也|不够|不太|不行|更|超|很|再|无敌|加大|没好|就这)')
+setu_pattern = re.compile(r'^(来|发|看|给|有没有|瑟|涩|se)\S{0,5}(图|瑟|涩|se|好看|好康|可爱)')
+not_enough_pattern = re.compile(r'^(完全|根本|一点也|不够|不太|不行|更|超|很|再|无敌|加大|没好|就这)')
 
 class image:
   def __init__(self,rev,auth):
@@ -88,30 +88,20 @@ class image:
     if re.search(r'^(生成|转化)?二维码\s(.*)', self.rev_msg):
       inputs = re.search(r'^(生成|转化)?二维码\s?(\S*)\s?([0-9]*)?\s?(L|M|Q|H)?\s?(\S*)?\s?(\S*)?', self.rev_msg).groups()
       text = inputs[1] if inputs[1] else ''
-      size = inputs[2] if inputs[2] else '200'
+      size = inputs[2] if inputs[2].isdigit() else '200'
       level = inputs[3] if inputs[3] else 'H'
-      fgcolor = inputs[4].replace('#','') if inputs[4] else 'black'
-      bgcolor = inputs[5].replace('#','') if inputs[5] else 'white'
+      fgcolor = inputs[4].replace('#','') if inputs[4].isdigit() else 'black'
+      bgcolor = inputs[5].replace('#','') if inputs[5].isdigit() else 'white'
 
       get_dict = {"text":text, "size":size, "level":level, "fgcolor":fgcolor, "bgcolor":bgcolor}
-      if re.search(r'logo$', self.rev_msg):
-        for rev in self.data.past_message:
-          if re.search(r'\[CQ:image\S+url=(\S+)\]', rev['raw_message']):
-            logo = re.search(r'\[CQ:image\S+url=(\S+)\]', rev['raw_message']).groups()[0]
-            get_dict['logo'] = logo
+      if re.search(r'\[CQ:image\S+url=(\S+)\]', self.rev_msg):
+        logo = re.search(r'\[CQ:image\S+url=(\S+)\]', self.rev_msg).groups()[0]
+        get_dict['logo'] = logo
 
       file_url = get_qrcode_respond(get_dict)
-      if 'logo' == fgcolor:
-        get_dict['fgcolor'] = 'black'
-        get_dict['bgcolor'] = 'white'
-        file_url = get_qrcode_respond(get_dict)
-        msg = f'[CQ:image,file={file_url}]'
-      elif '.png' not in file_url:
-        msg = '颜色参数错误或logo大于二维码！'
-      else:
-        msg = f'[CQ:image,file={file_url}]'
+      msg = f'[CQ:image,file={file_url}]'
     else:
-      msg = '请使用 二维码 [内容文字] [大小(200)] [冗余度:L/M/Q/(H)] [前景颜色(black)] [背景颜色(white)] 来生成二维码，如果需添加LOGO，请先发送一张图片，然后在所有参数都输入最后额外添加"logo"来将其作为LOGO'
+      msg = '请使用 二维码 [内容文字] [大小(200)] [冗余度:L/M/Q/(H)] [前景颜色(black)] [背景颜色(white)] 来生成二维码，如果需添加LOGO，请附带一张图片'
     reply(self.rev,msg)
 
   async def image_search(self, use_type=None):
@@ -121,12 +111,18 @@ class image:
       search_type = re.search(r'^以图搜图\s?(\S*)', self.rev_msg).groups()[0]
     image_url = ''
     proxies = 'http://127.0.0.1:7890'
-    for rev in self.data.past_message:
-          if re.search(r'\[CQ:image\S+url=(\S+)\]', rev['raw_message']):
-            image_url = re.search(r'\[CQ:image\S+url=(\S+)\]', rev['raw_message']).groups()[0]
+    search_success = True
+    if re.search(r'\[CQ:image\S+url=(\S+)\]', self.rev_msg):
+      image_url = re.search(r'\[CQ:image\S+url=(\S+)\]', self.rev_msg).groups()[0]
+    else:
+      for rev in self.data.past_message:
+        if re.search(r'\[CQ:image\S+url=(\S+)\]', rev['raw_message']):
+          image_url = re.search(r'\[CQ:image\S+url=(\S+)\]', rev['raw_message']).groups()[0]
+          
     try:
       if image_url == '':
-        msg = '请先发送一图片之后再使用以图搜图功能，可搜索类型有saucenao、tracemoe、谷歌识图、百度识图'
+        msg = '请先发送一张图片以使用以图搜图功能，可搜索类型有saucenao、tracemoe、谷歌识图、百度识图'
+        search_success = False
       elif search_type == 'saucenao':
         msg = await image_search_saucenao(image_url)
       elif search_type == 'tracemoe':
@@ -136,11 +132,18 @@ class image:
       else:
         msg = await image_search_baidu(image_url)
     except:
-      msg = '无法访问该网站进行搜索~'
-      
+      msg = '访问失败，无法访问该网站进行搜索~'
+      search_success = False
     if msg == '':
-      msg = f'%ROBOT_NAME%也没有见过这个呢~'
-    reply(self.rev,msg)
+      msg = f'%ROBOT_NAME%好像没有搜到相关结果呢~'
+      reply(self.rev,msg)
+    else:
+      if search_success and self.group_id:
+        msg_list = []
+        msg_list.append({'type': 'node', 'data': {'name': gVar.self_name, 'uin': gVar.self_id, 'content': msg}})
+        send_forward_msg(self.group_id, msg_list)
+      else:
+        reply(self.rev,msg)
 
 
   def pixiv_rank(self):
@@ -166,19 +169,42 @@ class image:
          msg = resp['detail']
         else:
           msg = f'未知错误'
+        reply(self.rev,msg)
       else:
         reply(self.rev,QA_get('!!处理中') + f'共有{len(resp["illusts"])}张图片~')
-        msg = f'Pixiv{rank_type}排行第{page}页\n\n'
         image_times = 0
-        for illust in resp["illusts"]:
-          if r18_mode or illust['sanity_level'] != 6:
-            image_times+=1
-            url = filter_pixiv_url(illust)
-            msg += f'\n{image_times}.{illust["user"]["name"]}的作品\n{illust["title"]}({illust["id"]})\n[CQ:image,file={url["example_url"]}]'
+        if self.group_id:
+          msg_list = []
+          content = f'Pixiv{rank_type}排行第{page}页'
+          msg_list.append({'type': 'node', 'data': {'name': gVar.self_name, 'uin': gVar.self_id, 'content': content}})
+          for illust in resp["illusts"]:
+            if r18_mode or illust['sanity_level'] != 6:
+              image_times+=1
+              url = filter_pixiv_url(illust)
+              content = f'{image_times}.{illust["user"]["name"]}的作品\n{illust["title"]}({illust["id"]})\n[CQ:image,file={url["example_url"]}]'
+              msg_list.append({'type': 'node', 'data': {'name': gVar.self_name, 'uin': gVar.self_id, 'content': content}})
+            elif r18_mode:
+              image_times+=1
+              url = filter_pixiv_url(illust)
+              content = f'{image_times}.{illust["user"]["name"]}的作品\n{illust["title"]}({illust["id"]})\n{url["example_url"]}\n'
+              msg_list.append({'type': 'node', 'data': {'name': gVar.self_name, 'uin': gVar.self_id, 'content': content}})
+          send_forward_msg(self.group_id, msg_list)
+        else:
+          msg = f'Pixiv{rank_type}排行第{page}页\n\n'
+          for illust in resp["illusts"]:
+            if r18_mode or illust['sanity_level'] != 6:
+              image_times+=1
+              url = filter_pixiv_url(illust)
+              msg += f'\n{image_times}.{illust["user"]["name"]}的作品\n{illust["title"]}({illust["id"]})\n[CQ:image,file={url["example_url"]}]'
+            elif r18_mode:
+              image_times+=1
+              url = filter_pixiv_url(illust)
+              msg += f'\n{image_times}.{illust["user"]["name"]}的作品\n{illust["title"]}({illust["id"]})\n{url["example_url"]}\n)'
+          reply(self.rev,msg)
     else:
       msg = f'可查询的排行类别有{list(rank_type_dict.keys())}，如[图月排行]'
-    time.sleep(1)
-    reply(self.rev,msg)
+      reply(self.rev,msg)
+    
 
   def pixiv_search(self):
     if re.search(r'^(搜图|查图|找图|寻图)\s(\S+)\s*[0-9]*\s*([0-9]+:[0-9]+)*', self.rev_msg):
@@ -221,9 +247,6 @@ class image:
         pages = int(page_range)
 
       msg = QA_get('!!处理中')+'寻找资源中~'
-      if page_max - page_min > 100:
-        msg += '\n请注意！过多页数会对服务器造成严重负担，已限制页数在100以内'
-        page_max = page_min + 99
       reply(self.rev,msg)
       time.sleep(1)
 
@@ -255,19 +278,42 @@ class image:
             illusts.append(illust)
         time.sleep(1)
         if len(illusts):
-          reply(self.rev, f'共寻找到{len(illusts)}张符合要求的图片，整理中~\n请注意！超过30张将可能无法发送~')
-          msg = f'Pixiv搜索页面\n标签:{words}\n收藏数大于：{min_bookmarks}\n已筛选张数：{len(resp["illusts"])}\n有效页数：{page_valid}\n有效张数：{len(resp)}\n\n'
+          reply(self.rev, f'共寻找到{len(illusts)}张符合要求的图片，整理中~')
           image_times = 0
-          for illust in illusts:
-            if r18_mode or illust['sanity_level'] != 6:
-              image_times+=1
-              url = filter_pixiv_url(illust)
-              msg += f'\n{image_times}.{illust["user"]["name"]}的作品\n{illust["title"]}({illust["id"]})\n[CQ:image,file={url["example_url"]}]'
+          if self.group_id:
+            msg_list = []
+            content = f'Pixiv搜索页面\n标签:{words}\n收藏数大于：{min_bookmarks}\n已筛选张数：{len(resp["illusts"])}\n有效页数：{page_valid}\n有效张数：{len(resp)}'
+            msg_list.append({'type': 'node', 'data': {'name': gVar.self_name, 'uin': gVar.self_id, 'content': content}})
+            for illust in illusts:
+              if r18_mode or illust['sanity_level'] != 6:
+                image_times+=1
+                url = filter_pixiv_url(illust)
+                content = f'{image_times}.{illust["user"]["name"]}的作品\n{illust["title"]}({illust["id"]})\n[CQ:image,file={url["example_url"]}]'
+                msg_list.append({'type': 'node', 'data': {'name': gVar.self_name, 'uin': gVar.self_id, 'content': content}})
+              elif r18_mode:
+                image_times+=1
+                url = filter_pixiv_url(illust)
+                content = f'{image_times}.{illust["user"]["name"]}的作品\n{illust["title"]}({illust["id"]})\n{url["example_url"]}\n'
+                msg_list.append({'type': 'node', 'data': {'name': gVar.self_name, 'uin': gVar.self_id, 'content': content}})
+            send_forward_msg(self.group_id, msg_list)
+          else:
+            msg = f'Pixiv搜索页面\n标签:{words}\n收藏数大于：{min_bookmarks}\n已筛选张数：{len(resp["illusts"])}\n有效页数：{page_valid}\n有效张数：{len(resp)}\n\n'
+            for illust in illusts:
+              if r18_mode or illust['sanity_level'] != 6:
+                image_times+=1
+                url = filter_pixiv_url(illust)
+                msg += f'\n{image_times}.{illust["user"]["name"]}的作品\n{illust["title"]}({illust["id"]})\n[CQ:image,file={url["example_url"]}]'
+              elif r18_mode:
+                image_times+=1
+                url = filter_pixiv_url(illust)
+                msg += f'\n{image_times}.{illust["user"]["name"]}的作品\n{illust["title"]}({illust["id"]})\n{url["example_url"]}\n'
+            reply(self.rev, msg)
         else:
           msg = f'已在{page_valid}张有效页内筛选{len(resp["illusts"])}张图，但是仍未找到符合要求的图片，可以尝试将收藏数降低'
+          reply(self.rev, msg)
     else:
       msg = '请使用 搜图 [标签] (最低收藏数(5000)) (页数(1)) 进行图片搜索，多标签前请用#分割'
-    reply(self.rev, msg)
+      reply(self.rev, msg)
 
   def pixiv_get(self):
     resp = get_pixiv_respond({})
@@ -404,7 +450,7 @@ def get_pixiv_respond(params):
     if gVar.is_debug: warnf(f'{[module_name]} 向{LPURPLE}HibiAPI{RESET}访问{url}')
     return resp
   except:
-    errorf(f'{[module_name]} 访问 {url} 出错')
+    errorf(f'[{module_name}] 访问 {url} 出错')
     return ''
 
 def get_qrcode_respond(params):
@@ -437,7 +483,7 @@ async def image_search_saucenao(image_url, proxies=None):
       msg += f'\n'
     return msg
   else:
-    return ''
+    return 'SauceNAO暂无结果~'
 
 async def image_search_tracemoe(image_url, proxies=None):
   resp = await TraceMoe(proxies=proxies).search(image_url)
@@ -445,45 +491,51 @@ async def image_search_tracemoe(image_url, proxies=None):
   if num := len(anims):
     msg = f'使用TraceMoe搜索到了{num}个结果\n\n'
     for i in anims:
-      if i.isAdult:
-        msg += '\n警告！！！这是一个里番'
       msg += f'\n番剧名称: {i.title_native}'
       msg += f'\n番剧中文名: {i.title_chinese}'
       msg += f'\n番剧罗马音名: {i.title_romaji}'
       msg += f'\n相似度: {i.similarity}%'
       msg += f'\n在剧中第{i.episode}集的{time_format(i.From)}到{time_format(i.To)}'
-      msg += f'\n[CQ:image,file={i.image}]'
+      if not i.isAdult:
+        msg += f'\n[CQ:image,file={i.image}]'
+      else:
+        msg += '\n[里番不提供画面]'
       msg += f'\n'
     return msg
   else:
-    return ''
+    return 'TraceMoe暂无结果~'
 
 async def image_search_google(image_url, proxies=None):
   resp = await Google(proxies=proxies).search(image_url)
-  images = resp.raw
+  images = []
+  for i in resp.raw[:10]:
+    if i.title and i.similarity:
+      images.append(i)
   if num := len(images):
     msg = f'使用谷歌识图搜索到了{num}个结果\n\n'
     for i in images:
       msg += f'\n{i.title}'
       msg += f'\n链接: {i.url}'
+      msg += f'\n[CQ:image,url={i.thumbnail}]'
       msg += f'\n'
     return msg
   else:
-    return ''
+    return '谷歌识图暂无结果~\n如果是动漫图片可以使用 SauceNao 进行搜索'
 
 async def image_search_baidu(image_url, proxies=None):
   resp = await BaiDu(proxies=proxies).search(image_url)
   images = []
-  for i in resp.similar:
-    if 'titles' in i and 'simi' in i:
+  for i in resp.raw[:10]:
+    if i.title and i.similarity:
       images.append(i)
   if num := len(images):
     msg = f'使用百度识图搜索到了{num}个结果\n'
     for i in images:
-      msg += f'\n{i["titles"]}'
-      msg += f'\n相似度: {i["simi"][:5]}%'
-      msg += f'\n原文地址: {i["titles_url"]}'
-      msg += f'\n[CQ:image,file={i["imgs_url"]}]'
+      printf(i.origin)
+      msg += f'\n{i.title}'
+      msg += f'\n相似度: {i.similarity}%'
+      msg += f'\n原文地址: {i.url}'
+      msg += f'\n[CQ:image,file={i.thumbnail}]'
       msg += f'\n'
     return msg
   else:
@@ -494,6 +546,7 @@ def time_format(seconds):
   h, m = divmod(m, 60)
   #return f'{h:d}:{m:02d}:{s:02d}'
   return f'{m:02d}:{s:02d}'
+
 
 
 module_enable(module_name, image)

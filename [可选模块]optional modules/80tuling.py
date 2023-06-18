@@ -44,15 +44,38 @@ class tuling:
     else: self.success = False
 
   def tuling(self):
-    msg = get_tuling(self.rev_msg, self.user_id, self.group_id, self.user_name)
+    msg = f'[CQ:reply,id={self.msg_id}]'
+    msg += get_tuling(self.rev_msg, self.user_id, self.group_id, self.user_name)
     reply(self.rev,msg)
     
-def get_tuling(info, user_id, group_id, user_name):
+def get_tuling(text, user_id, group_id, user_name):
+  req_type = 0
+  image = ''
+  media = ''
+  text = re.sub(r'\[CQ:(json|xml|forward|reply),.*\]', '', text)
+  if re.search(r'\[CQ:image,.*url=(.*)\]', text):
+    image_file = re.search(r'\[CQ:image,file=(.*),', text).groups()[0]
+    result = ocr_image({'image': image_file})
+    if status_ok(result):
+      text = result['data']['texts'][0]['text']
+    else:
+      image = re.search(r'\[CQ:image,.*url=(.*)\]', text).groups()[0]
+      text = re.sub(r'\[CQ:image.*\]', '', text)
+  elif re.search(r'\[CQ:record,.*url=(.*)\]', text):
+    req_type = 2
+    media = re.search(r'\[CQ:record,.*url=(.*)\]', text).groups()[0]
+    text = re.sub(r'\[CQ:record.*\]', '', text)
   post_json = {
-    "reqType": 0,
+    "reqType": req_type,
     "perception": {
       "inputText": {
-        "text": info
+        "text": text
+      },
+      "inputImage": {
+        "url": image
+      },
+      "inputMedia": {
+        "url": media
       },
     },
     "userInfo": {
@@ -62,11 +85,7 @@ def get_tuling(info, user_id, group_id, user_name):
       "userIdName": user_name
     }
   }
-  if re.search(r'^\[CQ:image,.*\]$',info):
-    post_json['reqType'] = 1
-  elif re.search(r'\[CQ:image,.*\]',info):
-    post_json['perception']['inputText']['text'] = re.sub(r'\[CQ:image.*\]', '', post_json['perception']['inputText']['text'])
-  if gVar.is_debug: printf(f'调用图灵机器人API返回结果：{post_json}')
+  if gVar.is_debug: printf(f'调用图灵机器人API：{post_json}')
   dat = json.dumps(post_json)
   url = 'http://openapi.turingapi.com/openapi/api/v2'
   response = requests.post(url, data=dat).json()

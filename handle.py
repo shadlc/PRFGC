@@ -63,20 +63,22 @@ def handle_msg(rev):
 			gVar.data['u' + str(user_id)] = gVar.memory()
 		data = gVar.data['u' + str(user_id)]
 		gVar.latest_data = 'u' + str(user_id)
+	else:
+		if ('u' + str(gVar.self_id)) not in gVar.data:
+			gVar.data['u' + str(gVar.self_id)] = gVar.memory()
+		data = gVar.data['u' + str(gVar.self_id)]
+		if not gVar.latest_data:
+			gVar.latest_data = 'u' + str(gVar.self_id)
 
-
-	#预处理消息（图片消息链接处理）
-	if 'message' in rev:
-		rev['message'] = re.sub(r',url=.*]',']',rev['message'])
 
 	#分类处理消息
 	if user_id == gVar.self_id:
 		pass
 	elif post_type == 'message':
 		if group_id:
-			gVar.data['g' + str(group_id)].past_message.append(rev)
+			data.past_message.append(rev)
 		else:
-			gVar.data['u' + str(user_id)].past_message.append(rev)
+			data.past_message.append(rev)
 		if str(user_id) in gVar.admin_id:
 			return message(rev,1)
 		elif group_id:
@@ -90,8 +92,7 @@ def handle_msg(rev):
 			else:
 				return message(rev)
 	elif post_type == 'notice':
-		if group_id: gVar.data['g' + str(group_id)].past_notice.append(rev)
-		else: gVar.data['u' + str(user_id)].past_notice.append(rev)
+		data.past_notice.append(rev)
 		return notice(rev)
 	elif post_type == 'request':
 		gVar.past_request.append(rev)

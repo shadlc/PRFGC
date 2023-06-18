@@ -29,6 +29,8 @@ follow_list = import_json(data_file)
 loop = asyncio.get_event_loop()
 live_status = {}
 past_dynamics = {}
+new_dynamics = {}
+deleted_dynamic_list = []
 today = time.gmtime().tm_yday
 bilibili_thread = threading.Thread(daemon=True)
 bilibili_thread_running = True
@@ -68,9 +70,9 @@ class bilibili:
       elif auth<=2 and re.search(r'^取关', self.rev_msg): self.unsubscribe()
       elif auth<=2 and re.search(r'^昵称', self.rev_msg): self.label()
       elif auth<=2 and re.search(r'^通知关键词', self.rev_msg): self.keywords()
+      elif auth<=3 and re.search(r'(\S+)\s?粉丝数\s?(开启|关闭)?$', self.rev_msg): self.fans(auth)
       elif auth<=3 and re.search(r'^(\S+)\s?动态\s?(开启|关闭)?$', self.rev_msg): self.dynamic()
       elif auth<=3 and re.search(r'^(\S+)\s?直播\s?(开启|关闭)?$', self.rev_msg): self.live()
-      elif auth<=3 and re.search(r'^(\S+)\s?粉丝数\s?(开启|关闭)?$', self.rev_msg): self.fans(auth)
       elif auth<=2 and re.search(r'^(\S+)\s?通知\s?(开启|关闭)$', self.rev_msg): self.setting()
       else: self.success = False
     else: self.success = False
@@ -287,8 +289,8 @@ class bilibili:
     reply(self.rev, msg)
 
   def fans(self,auth):
-    if re.search(r'^(\S+)\s?粉丝数\s?(开启|关闭)?$', self.rev_msg):
-      temp = re.search(r'^(\S+)\s?粉丝数\s?(开启|关闭)?$', self.rev_msg).groups()
+    if re.search(r'(\S+)\s?粉丝数\s?(开启|关闭)?$', self.rev_msg):
+      temp = re.search(r'(\S+)\s?粉丝数\s?(开启|关闭)?$', self.rev_msg).groups()
       user = temp[0]
       flag = temp[1]
       info = get_info(user)
@@ -393,99 +395,153 @@ class browser:
     return self._browser
 
   async def get_dynamic_screenshot(self,dynamic_id, style="mobile"):
+    time.sleep(2)
     if style.lower() == "mobile":
-        return await self.get_dynamic_screenshot_mobile(dynamic_id)
+      return await self.get_dynamic_screenshot_mobile(dynamic_id)
     else:
-        return await self.get_dynamic_screenshot_pc(dynamic_id)
+      return await self.get_dynamic_screenshot_pc(dynamic_id)
 
   async def get_dynamic_screenshot_mobile(self,dynamic_id):
     """移动端动态截图"""
     url = f"https://m.bilibili.com/dynamic/{dynamic_id}"
     browser = self.get_browser()
     page = await browser.new_page(
-        device_scale_factor=2,
-        user_agent=(
-            "Mozilla/5.0 (Linux; Android 10; RMX1911) AppleWebKit/537.36 "
-            "(KHTML, like Gecko) Chrome/100.0.4896.127 Mobile Safari/537.36"
-        ),
-        viewport={"width": 500, "height": 800},
+      device_scale_factor=2,
+      user_agent=(
+          "Mozilla/5.0 (iPhone; CPU iPhone OS 14_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0.3 Mobile/15E148 Safari/604.1"
+      ),
+      viewport={"width": 500, "height": 800},
     )
+    await page.goto(url, wait_until="networkidle", timeout=10000)
+    if page.url == "https://m.bilibili.com/404":
+        return None
     try:
-        await page.goto(url, wait_until="networkidle", timeout=10000)
-        if page.url == "https://m.bilibili.com/404":
-            return None
+      if "dynamic" in page.url:
         await page.add_script_tag(
-            # document.getElementsByClassName('m-dynamic-float-openapp').forEach(v=>v.remove());
-            # document.getElementsByClassName('dyn-header__following').forEach(v=>v.remove());
-            # document.getElementsByClassName('dyn-share').forEach(v=>v.remove());
+          # document.getElementsByClassName('m-dynamic-float-openapp').forEach(v=>v.remove());
+          # document.getElementsByClassName('dyn-header__following').forEach(v=>v.remove());
+          # document.getElementsByClassName('dyn-share').forEach(v=>v.remove());
 
-            # const dyn = document.getElementsByClassName('card-wrap')[0];
-            # dyn.style.width = 'auto';
-            # dyn.style.padding = '20px';
-            # dyn.style.backgroundImage= 'linear-gradient(to bottom right, #c8beff, #bef5ff)';
+          # const contentDiv = document.getElementsByClassName('dyn-card')[0];
+          # const wrapperDiv = document.createElement('div');
+          # contentDiv.parentNode.insertBefore(wrapperDiv, contentDiv);
+          # wrapperDiv.appendChild(contentDiv); 
 
-            # const content = document.getElementsByClassName('dyn-card')[0];
-            # content.style.boxShadow = '0px 0px 10px 2px #fff';
-            # content.style.border = '2px solid white';
-            # content.style.borderRadius = '10px';
-            # content.style.background = 'rgba(255,255,255,0.7)';
-            # document.getElementsByClassName('dyn-content__orig')[0].style.backgroundColor = 'transparent';
-            # content.style.fontFamily = 'Noto Sans CJK SC, sans-serif';
-            # content.style.overflowWrap = 'break-word';
+          # wrapperDiv.style.padding = '10px';
+          # wrapperDiv.style.backgroundImage= 'linear-gradient(to bottom right, #c8beff, #bef5ff)';
+          # contentDiv.style.boxShadow = '0px 0px 10px 2px #fff';
+          # contentDiv.style.border = '2px solid white';
+          # contentDiv.style.borderRadius = '10px';
+          # contentDiv.style.background = 'rgba(255,255,255,0.7)';
+          # contentDiv.style.fontFamily = 'Noto Sans CJK SC, sans-serif';
+          # contentDiv.style.overflowWrap = 'break-word';
 
-            # document.querySelectorAll('.dyn-draw__picture>img').forEach(v=>{ v.style.border = '2px solid white'; v.style.borderRadius = '10px'; });
-            # document.getElementsByClassName('dyn-article__card').forEach(v=>{ v.style.border = '2px solid white'; v.style.borderRadius = '10px'; v.style.background = 'transparent'; });
+          # contentDiv.getElementsByClassName('dyn-content__orig')[0].style.backgroundColor = 'transparent';
+          # document.querySelectorAll('img').forEach(v=>{ v.style.border = '2px solid white'; });
+          # document.getElementsByClassName('dyn-article__card').forEach(v=>{ v.style.border = '2px solid white'; v.style.background = 'transparent'; });
 
-            # document.getElementsByClassName('dyn-header__author__face').forEach(v=>{ v.style.borderRadius = '100%'; });
-            # document.getElementsByClassName('dyn-article__card').forEach(v=>{ v.style.maxHeight = 'fit-content'; });
-            # document.getElementsByClassName('dyn-article__covers__item').forEach(v=>v.style.margin = '10px');
-            # document.getElementsByClassName('dyn-draw').forEach(v=>{ v.children.forEach(p=>{ p.style.padding = '5px'; p.children.forEach(v=>{ v.style.margin = '3px';total = (parseInt(getComputedStyle(p).width) - 10); count = (p.children.length); if(count < 4) {size = (total / count - 6);}else if(count == 4){size = (total / 2 - 6)}else{size = total / 3 - 6} v.style.width = size.toString() + 'px'; })})});
-            content=
-            # 去除打开app按钮
-            "document.getElementsByClassName('m-dynamic-float-openapp').forEach(v=>v.remove());"
-            # 去除关注按钮
-            "document.getElementsByClassName('dyn-header__following').forEach(v=>v.remove());"
-            # 去除分享按钮
-            "document.getElementsByClassName('dyn-share').forEach(v=>v.remove());"
-            # 获取整个动态
-            "const dyn = document.getElementsByClassName('card-wrap')[0];"
-            # 修复宽度大小问题
-            "dyn.style.width = 'auto';"
-            "dyn.style.padding = '10px';"
-            # 显示背景颜色
-            "dyn.style.backgroundImage = 'linear-gradient(to bottom right, #c8beff, #bef5ff)';"
-            # 获取内容
-            "const content = document.getElementsByClassName('dyn-card')[0];"
-            # 添加阴影与边框
-            "content.style.boxShadow = '0px 0px 10px 2px #fff';"
-            "content.style.border = '2px solid white';"
-            "content.style.borderRadius = '10px';"
-            # 文章主体毛玻璃
-            "content.style.background = 'rgba(255,255,255,0.7)';"
-            "document.getElementsByClassName('dyn-content__orig')[0].style.backgroundColor = 'transparent';"
-            # 修复字体与换行问题
-            "content.style.fontFamily = 'Noto Sans CJK SC, sans-serif';"
-            "content.style.overflowWrap = 'break-word';"
-            # 添加图片边框
-            "document.querySelectorAll('.dyn-draw__picture>img').forEach(v=>{ v.style.border = '2px solid white'; v.style.borderRadius = '10px'; });"
-            "document.getElementsByClassName('dyn-article__card').forEach(v=>{ v.style.border = '2px solid white'; v.style.borderRadius = '10px'; v.style.background = 'transparent'; });"
-
-            # 修复内部元素大小
-            "document.getElementsByClassName('dyn-header__author__face').forEach(v=>{ v.style.borderRadius = '100%'; });"
-            "document.getElementsByClassName('dyn-article__card').forEach(v=>{ v.style.maxHeight = 'fit-content'; });"
-            "document.getElementsByClassName('dyn-article__covers__item').forEach(v=>v.style.margin = '10px');"
-            "document.getElementsByClassName('dyn-draw').forEach(v=>{ v.children.forEach(p=>{ p.style.padding = '5px'; p.children.forEach(v=>{ v.style.margin = '3px';total = (parseInt(getComputedStyle(p).width) - 10); count = (p.children.length); if(count < 4) {size = (total / count - 6);}else if(count == 4){size = (total / 2 - 6)}else{size = total / 3 - 6} v.style.width = size.toString() + 'px'; })})});"
+          content=
+          # 去除打开app按钮
+          "document.getElementsByClassName('m-dynamic-float-openapp').forEach(v=>v.remove());"
+          # 去除关注按钮
+          "document.getElementsByClassName('dyn-header__following').forEach(v=>v.remove());"
+          # 去除分享按钮
+          "document.getElementsByClassName('dyn-share').forEach(v=>v.remove());"
+          # 选中动态并添加外壳
+          "const contentDiv = document.getElementsByClassName('dyn-card')[0];"
+          "const wrapperDiv = document.createElement('div');"
+          "wrapperDiv.classList.add('dynamic-div');"
+          "contentDiv.parentNode.insertBefore(wrapperDiv, contentDiv);"
+          "wrapperDiv.appendChild(contentDiv);"
+          # 增加边框
+          "wrapperDiv.style.padding = '10px';"
+          # 显示背景颜色
+          "wrapperDiv.style.backgroundImage = 'linear-gradient(to bottom right, #c8beff, #bef5ff)';"
+          # 添加阴影与边框
+          "contentDiv.style.boxShadow = '0px 0px 10px 2px #fff';"
+          "contentDiv.style.border = '2px solid white';"
+          "contentDiv.style.borderRadius = '10px';"
+          # 文章主体毛玻璃
+          "contentDiv.style.background = 'rgba(255,255,255,0.7)';"
+          # 修复字体与换行问题
+          "contentDiv.style.fontFamily = 'Noto Sans CJK SC, sans-serif';"
+          "contentDiv.style.overflowWrap = 'break-word';"
+          # 修复内部元素背景和添加边框
+          "document.getElementsByClassName('dyn-content__orig')[0].style.backgroundColor = 'transparent';"
+          "document.querySelectorAll('.dyn-draw__picture>img').forEach(v=>{ v.style.border = '2px solid white'; });"
+          "document.getElementsByClassName('dyn-article__card').forEach(v=>{ v.style.border = '2px solid white'; v.style.background = 'transparent'; });"
         )
         card = await page.query_selector(".card-wrap")
-        assert card
-        clip = await card.bounding_box()
-        assert clip
-        return await page.screenshot(clip=clip, full_page=True)
-    except Exception:
-        printf(f"截取动态时发生错误：{url}")
-        return await page.screenshot(full_page=True)
+      else:
+        await page.add_script_tag(
+
+            # document.querySelector('.dialog-close')?.click();
+            # document.querySelector('.opus-read-more')?.click();
+            # setTimeout(()=>{document.querySelector('.cancel')?.click()},10);
+            # document.getElementsByClassName('m-float-openapp').forEach(v=>v.remove());
+            # document.getElementsByClassName('openapp-dialog').forEach(v=>v.remove());
+            # document.getElementsByClassName('easy-follow-btn').forEach(v=>v.remove());
+
+            # const contentDiv = document.querySelector('.opus-modules');
+            # const wrapperDiv = document.createElement('div');
+            # wrapperDiv.classList.add('dynamic-div');
+            # contentDiv.parentNode.insertBefore(wrapperDiv, contentDiv);
+            # wrapperDiv.appendChild(contentDiv); 
+
+            # wrapperDiv.style.padding = '10px';
+            # wrapperDiv.style.backgroundImage= 'linear-gradient(to bottom right, #c8beff, #bef5ff)';
+            # contentDiv.style.boxShadow = '0px 0px 10px 2px #fff';
+            # contentDiv.style.border = '2px solid white';
+            # contentDiv.style.borderRadius = '10px';
+            # contentDiv.style.background = 'rgba(255,255,255,0.7)';
+            # contentDiv.style.fontFamily = 'Noto Sans CJK SC, sans-serif';
+            # contentDiv.style.overflowWrap = 'break-word';
+
+            # document.querySelectorAll('.bm-link-card-reserve__card').forEach((e)=>{e.style.background = 'rgba(255,255,255,0.7)';});
+
+            content=
+            # 展开页面
+            "document.querySelector('.dialog-close')?.click();"
+            "document.querySelector('.opus-read-more')?.click();"
+            "setTimeout(()=>{document.querySelector('.cancel')?.click()},10);"
+            # 去除打开app按钮
+            "document.getElementsByClassName('m-float-openapp').forEach(v=>v.remove());"
+            "document.getElementsByClassName('openapp-dialog').forEach(v=>v.remove());"
+            # 去除关注按钮
+            "document.getElementsByClassName('easy-follow-btn').forEach(v=>v.remove());"
+
+            # 选中动态并添加外壳
+            "const contentDiv = document.querySelector('.opus-modules');"
+            "const wrapperDiv = document.createElement('div');"
+            "wrapperDiv.classList.add('dynamic-div');"
+            "contentDiv.parentNode.insertBefore(wrapperDiv, contentDiv);"
+            "wrapperDiv.appendChild(contentDiv);"
+
+            # 增加边框
+            "wrapperDiv.style.padding = '10px';"
+            # 显示背景颜色
+            "wrapperDiv.style.backgroundImage= 'linear-gradient(to bottom right, #c8beff, #bef5ff)';"
+            # 添加阴影与边框
+            "contentDiv.style.boxShadow = '0px 0px 10px 2px #fff';"
+            "contentDiv.style.border = '2px solid white';"
+            "contentDiv.style.borderRadius = '10px';"
+            # 文章主体毛玻璃
+            "contentDiv.style.background = 'rgba(255,255,255,0.7)';"
+            "contentDiv.style.fontFamily = 'Noto Sans CJK SC, sans-serif';"
+            "contentDiv.style.overflowWrap = 'break-word';"
+            # 背景修复
+            "document.querySelectorAll('.bm-link-card-reserve__card').forEach((e)=>{e.style.background = 'rgba(255,255,255,0.7)';});"
+        )
+        card = await page.query_selector(".dynamic-div")
+      assert card
+      clip = await card.bounding_box()
+      assert clip
+      return await page.screenshot(clip=clip, full_page=True)
+    except Exception as e:
+      printf(f"截取动态时发生错误：{url}")
+      return await page.screenshot(full_page=True)
     finally:
-        await page.close()
+      await page.close()
 
   async def get_dynamic_screenshot_pc(self,dynamic_id):
     """电脑端动态截图"""
@@ -526,14 +582,19 @@ class browser:
     finally:
         await context.close()
 
-def live_check(proxy=None):
+def live_check():
   uids = get_uid_list("live")
   if not uids:
     return
-  res = task(get_rooms_info_by_uids(uids, reqtype="web", proxies=proxy))
-  if not res:
+  try:
+    info = task(get_rooms_info_by_uids(uids, reqtype="web", proxies=None))
+  except:
+    info = None
+  if not info:
+    warnf(f"[{module_name}] 爬取直播状态超时,等待下一轮询重试~")
+    time.sleep(10)
     return
-  for uid, live in res.items():
+  for uid, live in info.items():
     status = int(live["live_status"]) % 2
     if uid not in live_status:
       live_status[uid] = status
@@ -553,41 +614,87 @@ def live_check(proxy=None):
             if live["cover_from_user"]:
               msg += f'\n[CQ:image,file={live["cover_from_user"]}]'
             msg += f'https://live.bilibili.com/{room_id}'
-            msg += f'\n========近期画面========'
+            msg += f'\n========上次直播画面========'
             msg += f'\n[CQ:image,file={live["keyframe"]}]'
             reply_back(owner_id, msg)
   time.sleep(10)
 
-def dynamic_check(proxy=None):
+def dynamic_check():
+  global deleted_dynamic_list
   uids = get_uid_list("dynamic")
   if not uids:
     return
   for uid in uids:
     try:
-      dynamic = get_new_dynamic(uid)
+      refresh_dynamics(uid)
     except:
-      warnf(f"[B站动态检测] 爬取动态超时,等待下一轮询重试~")
+      warnf(f"[{module_name}] 爬取动态超时,等待下一轮询重试~")
+      time.sleep(3)
       continue
-
-    if dynamic:
-      name = dynamic[0]
-      dynamic_id = dynamic[1]
-      dynamic_type = dynamic[2]
-      text = dynamic[3]
+    time.sleep(2)
+    type_msg = {0: "发布了新动态", 1: "转发了一条动态", 2: "发布了新投稿", 6: "发布了新图文动态", 7: "发布了新文字动态", 8: "发布了新专栏", 9: "发布了新音频"}
+    dynamics = get_new_dynamics(uid)
+    for dynamic in dynamics:
+      dynamic_id = dynamic["dynamic_id"]
+      author = dynamic["author"]
+      dynamic_type = dynamic["dynamic_type"]
+      content = dynamic["content"]
       for owner_id in follow_list:
         if uid in follow_list[owner_id]:
           info = follow_list[owner_id][uid]
-          if info['global_notice'] and info['dynamic_notice'] and re.search(info['keyword'], text):
-            type_msg = {0: "发布了新动态", 1: "转发了一条动态", 2: "发布了新投稿", 6: "发布了新图文动态", 7: "发布了新文字动态", 8: "发布了新专栏", 9: "发布了新音频"}
-            name = get_name_by_uid(uid)
-            if dynamic_type in type_msg: msg = f'{name}{type_msg[dynamic_type]}：'
-            else : msg = f'{name}发布了新动态{dynamic_type}：'
+          if info['global_notice'] and info['dynamic_notice'] and re.search(info['keyword'], content):
+            author = get_name_by_uid(uid)
+            if dynamic_type in type_msg: msg = f'{author}{type_msg[dynamic_type]}：'
+            else : msg = f'{author}发布了新动态{dynamic_type}：'
             msg += f'\nhttps://t.bilibili.com/{dynamic_id}'
             msg += f'\n[CQ:image,file=bilibili/{dynamic_id}.png]'
             reply_back(owner_id, msg)
-    time.sleep(3)
+            time.sleep(1)
 
-def fans_check(check_day=True,proxy=None):
+    dynamics = get_deleted_dynamic(uid)
+    deleted_dynamic_list += dynamics
+    count = 0
+    max_i = None
+    if dynamics == []:
+      deleted_dynamic_list = []
+    for i in deleted_dynamic_list:
+      if deleted_dynamic_list.count(i) > count:
+        max_i = i
+        count = deleted_dynamic_list.count(i)
+    if count <= 3:
+      return
+    for dynamic in dynamics:
+      dynamic_id = dynamic["dynamic_id"]
+      author = dynamic["author"]
+      dynamic_type = dynamic["dynamic_type"]
+      content = dynamic["content"]
+      for owner_id in follow_list:
+        if uid in follow_list[owner_id]:
+          info = follow_list[owner_id][uid]
+          if info['global_notice'] and info['dynamic_notice'] and re.search(info['keyword'], content):
+            author = get_name_by_uid(uid)
+            msg = ""
+            past_msg = gVar.self_message
+            for i in range(len(past_msg)):
+              if dynamic_id in past_msg[i].get('message'):
+                msg_id = past_msg[i]['message_id']
+                msg += f'[CQ:reply,id={msg_id}]'
+                msg += f'{author}已将这条动态删除啦~'
+                break
+            if not detect_image(f'{dynamic_id}.png'):
+              msg = f'{author}删除了一条动态~但我没有来得及保存截图~嘤嘤嘤~'
+              msg += f'\n\n动态内容：\n{content}'
+              msg += f'\n\n动态旧地址：https://t.bilibili.com/{dynamic_id}'
+            elif msg == "":
+              msg = f'{author}已将此动态已被删除啦~'
+              msg += f'\n[CQ:image,file=bilibili/{dynamic_id}.png]'
+            if dynamic in past_dynamics[uid]:
+              past_dynamics[uid].remove(dynamic)
+              deleted_dynamic_list = list(filter(lambda x:x!=dynamic,deleted_dynamic_list))
+            reply_back(owner_id, msg)
+            time.sleep(1)
+
+def fans_check(check_day=True):
   global today
   if check_day and today == time.gmtime().tm_yday:
     return
@@ -598,7 +705,8 @@ def fans_check(check_day=True,proxy=None):
     try:
       info = get_user_info(uid)
     except:
-      warnf(f"[B站动态检测] 爬取粉丝数超时,等待下一轮询重试~")
+      warnf(f"[{module_name}] 爬取粉丝数超时,等待下一轮询重试~")
+      time.sleep(2)
       continue
 
     if info:
@@ -645,7 +753,7 @@ def fans_check(check_day=True,proxy=None):
             else: continue
             update_follow_list_info(uid, {'fans': fans})
             reply_back(owner_id, msg)
-    time.sleep(3)
+    time.sleep(2)
 
 def get_follow_list_info(input_uid, name):
   for owner_id in follow_list:
@@ -662,63 +770,70 @@ def update_follow_list_info(input_uid, data):
           follow_list[owner_id][uid][key] = value
   save_json(data_file, follow_list)
 
-def get_new_dynamic(uid,proxy=None):
-  if uid not in past_dynamics:
-    init_dynamic(uid)
-    time.sleep(3)
-  dynamics = task(grpc_get_user_dynamics(int(uid), timeout=10, proxy=proxy)).list
+def refresh_dynamics(uid):
+  dynamics = task(grpc_get_user_dynamics(int(uid), timeout=10, proxy=None)).list
   if len(dynamics) > 0:
-    dynamic_id = int(dynamics[0].extend.dyn_id_str)
-    index = 0
-    if len(dynamics) != 1:
-      if int(dynamics[0].extend.dyn_id_str) < int(dynamics[1].extend.dyn_id_str):
-        del dynamics[0]
-      for i in range(len(dynamics)):
-        if dynamics[i].extend.dyn_id_str not in past_dynamics[uid]:
-          dynamic_id = int(dynamics[i].extend.dyn_id_str)
-          index = i
-          break
-    dynamic_type = dynamics[index].card_type
-    author_name = dynamics[index].modules[0].module_author.author.name
-    text = dynamics[index].extend.orig_desc[0].text if len(dynamics[index].extend.orig_desc) else ''
-    if str(dynamic_id) not in past_dynamics[uid]:
-      past_dynamics[uid].append(str(dynamic_id))
-      image = task(Browser.get_dynamic_screenshot(dynamic_id))
-      image_file = f'{dynamic_id}.png'
-      image_save(image_file, image)
-      return [author_name, dynamic_id, dynamic_type, text]
-  return None
+    if len(dynamics) > 1 and int(dynamics[0].extend.dyn_id_str) <= int(dynamics[1].extend.dyn_id_str):
+      dynamics.pop(0)
+    new_dynamics[uid] = []
+    for i in range(len(dynamics)):
+      if i <= len(dynamics) and dynamics[i].card_type == 18:
+        continue
+      dynamic_id = dynamics[i].extend.dyn_id_str
+      author = dynamics[i].modules[0].module_author.author.name
+      dynamic_type = dynamics[i].card_type
+      content = dynamics[i].extend.orig_desc[0].text if len(dynamics[i].extend.orig_desc) else ''
+      new_dynamics[uid].append({"dynamic_id": dynamic_id, "author": author, "dynamic_type": dynamic_type, "content": content})
+    if uid not in past_dynamics:
+      past_dynamics[uid] = new_dynamics[uid].copy()
 
-def get_latest_dynamic(uid,proxy=None):
-  dynamics = task(grpc_get_user_dynamics(int(uid), timeout=10, proxy=proxy)).list
+def get_new_dynamics(uid):
+  dynamics = new_dynamics[uid]
+  result = []
   if len(dynamics) > 0:
-    dynamic_id = int(dynamics[0].extend.dyn_id_str)
-    index = 0
+    for i in range(len(dynamics)):
+      dynamic_id = dynamics[i]["dynamic_id"]
+      if dynamic_id not in [d["dynamic_id"] for d in past_dynamics[uid]] and int(dynamic_id) >= int(past_dynamics[uid][-1]["dynamic_id"]):
+        past_dynamics[uid].insert(i, dynamics[i])
+        image = task(Browser.get_dynamic_screenshot(dynamic_id))
+        image_file = f'{dynamic_id}.png'
+        image_save(image_file, image)
+        result.append(dynamics[i])
+  return result
+
+def get_deleted_dynamic(uid):
+  result = []
+  if len(past_dynamics[uid]) and len(new_dynamics[uid]):
+    for dynamic in past_dynamics[uid]:
+      dynamic_id = dynamic["dynamic_id"]
+      if dynamic_id not in [d["dynamic_id"] for d in new_dynamics[uid]] and int(dynamic_id) >= int(new_dynamics[uid][-1]["dynamic_id"]):
+        result.append(dynamic)
+  return result
+
+def get_latest_dynamic(uid):
+  if uid not in new_dynamics or new_dynamics[uid] == []:
+    refresh_dynamics(uid)
+  dynamics = new_dynamics[uid]
+  if len(dynamics) > 0:
     if len(dynamics) != 1:
-      if int(dynamics[0].extend.dyn_id_str) < int(dynamics[1].extend.dyn_id_str):
-        del dynamics[0]
-    index = 0
-    dynamic_id = dynamics[index].extend.dyn_id_str
-    dynamic_type = dynamics[index].card_type
-    author_name = dynamics[index].modules[0].module_author.author.name
-    text = dynamics[index].extend.orig_desc[0].text
+      if int(dynamics[0]["dynamic_id"]) < int(dynamics[1]["dynamic_id"]):
+        dynamics.pop(0)
+    dynamic_id = int(dynamics[0]["dynamic_id"])
+    dynamic_type = dynamics[0]["dynamic_type"]
+    author = dynamics[0]["author"]
+    content = dynamics[0]["content"]
     image = task(Browser.get_dynamic_screenshot(dynamic_id))
     image_file = f'{dynamic_id}.png'
     image_save(image_file, image)
-    return [author_name, dynamic_id, dynamic_type, text]
+    return [author, dynamic_id, dynamic_type, content]
   return None
 
-def init_dynamic(uid,proxy=None):
-  if uid not in past_dynamics:
-    past_dynamics[uid] = []
-  dynamics = task(grpc_get_user_dynamics(int(uid), timeout=10, proxy=proxy)).list
-  if len(dynamics) > 0:
-    for i in range(len(dynamics)):
-      past_dynamics[uid].append(str(dynamics[i].extend.dyn_id_str))
-
-def get_live_status(uid,proxy=None):
-  info = task(get_rooms_info_by_uids([uid], reqtype="web", proxies=proxy))
-  if info != []:
+def get_live_status(uid):
+  try:
+    info = task(get_rooms_info_by_uids([uid], reqtype="web", proxies=None))
+  except:
+    info = None
+  if info != None:
     data = info[uid]
     online = data['live_status']
     title = data['title']
@@ -850,6 +965,15 @@ def image_save(file_name,file):
     os.mkdir(f'{image_dir}/bilibili')
   open(f'{image_dir}/bilibili/{file_name}', mode="wb").write(file)
   return f'{image_dir}/bilibili/{file_name}'
+
+def detect_image(file_name):
+  image_dir = gVar.data_dir + '/images'
+  if not os.path.exists(image_dir):
+    raise RuntimeError('CQHttp数据文件夹设置不正确！')
+  if not os.path.exists(f'{image_dir}/bilibili/{file_name}'):
+    return False
+  return True
+
 
 def task(task_func):
   task = loop.create_task(task_func)

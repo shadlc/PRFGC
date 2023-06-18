@@ -67,9 +67,7 @@ class guess_number:
     reply(self.rev,msg)
 
   def player_start_guess(self):
-    self.data.guess_for_player[0] = True
-    self.data.guess_for_player[1] = random.randint(0, 100)
-    self.data.guess_for_player[2] = 0
+    self.data.guess_for_player = [True, random.randint(0, 100), 0]
     msg = '%ROBOT_NAME%想了一个0~100之间的整数，来猜猜看吧'
     reply(self.rev,msg)
     printf('随机数字为' + str(self.data.guess_for_player[1]))
@@ -84,9 +82,9 @@ class guess_number:
 
   def guess_num(self):
     guess_num = int(re.search(r'([0-9]+)$', self.rev_msg).groups()[0])
+    self.data.guess_for_player[2] += 1
     times = self.data.guess_for_player[2]
     number = self.data.guess_for_player[1]
-    times += 1
     if guess_num == number:
       self.data.guess_for_player[0] = False
       msg = self.user_name + f'猜对啦！\n一共花了{times}次，'
@@ -121,7 +119,7 @@ class guess_number:
     reply(self.rev,msg)
 
   def correct(self):
-    times = str(self.data.guess_for_robot[3])
+    times = self.data.guess_for_robot[3]
     msg = f'好耶！%ROBOT_NAME%猜了{times}次，'
     if times >= 11 :
       msg = msg + '不可能吧！'
