@@ -10,7 +10,10 @@ import time
 from subprocess import Popen, PIPE, run
 
 module_name = '饥荒服务器操作模块'
-tmux_name = ''
+tmux_name = 'cjc'
+start_master_script = './master.sh'
+start_caves_script = './caves.sh'
+update_script = '../update.sh'
 
 class dont_starve:
   def __init__(self,rev,auth):
@@ -61,7 +64,7 @@ class dont_starve:
       msg += '\n#更新 | 手动更新服务器'
       msg += '\n#回档 | 将服务器回档'
     if auth<=2:
-      msg += '\n#运行状况 | 查看服务器运行状况'
+      msg = '\n#运行状况 | 查看服务器运行状况'
       msg += '\n#在线玩家 | 查看在线玩家'
       msg += '\n#公告 [文本] | 向服务器发送公告'
       msg += '\n#保存 | 服务器保存存档'
@@ -86,7 +89,7 @@ class dont_starve:
     if re.search(r'^公告\s?(.+)$', self.rev_msg):
       text = re.search(r'^公告\s?(.+)$', self.rev_msg).groups()[0]
       text = text.replace('"','\\\\\\\"')
-      tmux_captured = send_command(f'c_announce(\\"{text}\\")\;')
+      tmux_captured = run_tmux_cmd(f'c_announce(\\"{text}\\")\;')
       if 'RemoteCommandInput: "c_announce(' in tmux_captured:
         msg = '服务器公告已发送！'
       else:
@@ -97,7 +100,7 @@ class dont_starve:
 
 
   def player_list(self):
-    tmux_captured = send_command('c_listallplayers()\;')
+    tmux_captured = run_tmux_cmd('c_listallplayers()\;')
     players = tmux_captured.split('RemoteCommandInput: "c_listallplayers();"')[-1]
     count = 0
     msg = '服务器当前玩家列表：'
@@ -112,7 +115,7 @@ class dont_starve:
     reply(self.rev,msg)
 
   def save(self):
-    tmux_captured = send_command('c_save()\;')
+    tmux_captured = run_tmux_cmd('c_save()\;')
     if 'RemoteCommandInput: "c_save();"' in tmux_captured:
       msg = '服务器保存指令已发送！'
     else:
@@ -121,12 +124,13 @@ class dont_starve:
 
   def stop(self):
     if self.executing:
-      msg = '请等待当前上一完成！'
+      msg = '请等待上一操作完成！'
       reply(self.rev,msg)
+      return
 
     self.executing = True
-    tmux_captured_master = send_command('c_shutdown()\;', f'{tmux_name}:0.0')
-    tmux_captured_cave = send_command('c_shutdown()\;', f'{tmux_name}:0.1')
+    tmux_captured_master = run_tmux_cmd('c_shutdown()\;', f'{tmux_name}:0.0')
+    tmux_captured_cave = run_tmux_cmd('c_shutdown()\;', f'{tmux_name}:0.1')
     if 'RemoteCommandInput: "c_shutdown();"' in tmux_captured_master and 'RemoteCommandInput: "c_shutdown();"' in tmux_captured_cave:
       msg = '服务器停止成功！'
     elif 'RemoteCommandInput: "c_shutdown();"' not in tmux_captured_master:
@@ -140,17 +144,19 @@ class dont_starve:
 
   def restart(self):
     if self.executing:
-      msg = '请等待当前上一完成！'
+      msg = '请等待上一操作完成！'
       reply(self.rev,msg)
+      return
     self.executing = True
-    tmux = run(f'tmux ls |grep {tmux_name}',shell=True,capture_output=True,encoding='utf-8').stdout
+
+    tmux = run_cmd(f'tmux ls |grep {tmux_name}')
     if not tmux:
       msg = '服务器已彻底关闭，请联系管理员进行首次开启'
       reply(self.rev,msg)
       return
 
-    tmux_captured_master = send_command('c_shutdown()\;', f'{tmux_name}:0.0')
-    tmux_captured_cave = send_command('c_shutdown()\;', f'{tmux_name}:0.1')
+    tmux_captured_master = run_tmux_cmd('c_shutdown()\;', f'{tmux_name}:0.0')
+    tmux_captured_cave = run_tmux_cmd('c_shutdown()\;', f'{tmux_name}:0.1')
 
     if tmux_captured_master or tmux_captured_cave:
       msg = '服务器正在重启中，请稍后...'
@@ -164,14 +170,14 @@ class dont_starve:
       reply(self.rev,msg)
       return
 
-    tmux_captured = send_command('./master.sh', f'{tmux_name}:0.0')
+    tmux_captured = run_tmux_cmd(start_master_script, f'{tmux_name}:0.0')
     if not detect_started(f'{tmux_name}:0.0'):
       msg = '地上服务器启动失败！请联系管理员查看问题！'
       reply(self.rev,msg)
       return
     msg = '地上服务器已开启！'
     reply(self.rev,msg)
-    tmux_captured = send_command('./caves.sh', f'{tmux_name}:0.1')
+    tmux_captured = run_tmux_cmd(start_caves_script, f'{tmux_name}:0.1')
     if not detect_started(f'{tmux_name}:0.1'):
       msg = '洞穴服务器启动失败！请联系管理员查看问题！'
       reply(self.rev,msg)
@@ -182,10 +188,11 @@ class dont_starve:
 
   def update(self):
     if self.executing:
-      msg = '请等待当前上一完成！'
+      msg = '请等待上一操作完成！'
       reply(self.rev,msg)
+      return
     self.executing = True
-    tmux = run(f'tmux ls |grep {tmux_name}',shell=True,capture_output=True,encoding='utf-8').stdout
+    tmux = run_cmd(f'tmux ls |grep {tmux_name}')
     if not tmux:
       msg = '服务器已彻底关闭，请联系管理员进行首次开启'
       reply(self.rev,msg)
@@ -194,15 +201,15 @@ class dont_starve:
     if detect_running() == 0:
       msg = '服务器正在运行中，为了更新，正在关闭服务器...'
       reply(self.rev,msg)
-      tmux_captured_master = send_command('c_shutdown()\;', f'{tmux_name}:0.0')
-      tmux_captured_cave = send_command('c_shutdown()\;', f'{tmux_name}:0.1')
+      tmux_captured_master = run_tmux_cmd('c_shutdown()\;', f'{tmux_name}:0.0')
+      tmux_captured_cave = run_tmux_cmd('c_shutdown()\;', f'{tmux_name}:0.1')
 
       if not (detect_exited(f'{tmux_name}:0.0') and detect_exited(f'{tmux_name}:0.1')):
         msg = '服务器关闭失败！请联系管理员查看问题！'
         reply(self.rev,msg)
         return
 
-    tmux_captured = send_command('../update.sh', f'{tmux_name}:0.0')
+    tmux_captured = run_tmux_cmd(update_script, f'{tmux_name}:0.0')
     if 'updating' not in tmux_captured:
       msg = '服务器更新脚本执行失败！请联系管理员查看问题！'
       reply(self.rev,msg)
@@ -217,14 +224,14 @@ class dont_starve:
     msg = '服务器更新成功！正在启动中...'
     reply(self.rev,msg)
 
-    tmux_captured = send_command('./master.sh', f'{tmux_name}:0.0')
+    tmux_captured = run_tmux_cmd(start_master_script, f'{tmux_name}:0.0')
     if not detect_started(f'{tmux_name}:0.0'):
       msg = '地上服务器启动失败！请联系管理员查看问题！'
       reply(self.rev,msg)
       return
     msg = '地上服务器已开启！'
     reply(self.rev,msg)
-    tmux_captured = send_command('./caves.sh', f'{tmux_name}:0.1')
+    tmux_captured = run_tmux_cmd(start_caves_script, f'{tmux_name}:0.1')
     if not detect_started(f'{tmux_name}:0.1'):
       msg = '洞穴服务器启动失败！请联系管理员查看问题！'
       reply(self.rev,msg)
@@ -235,15 +242,18 @@ class dont_starve:
 
   def rollback(self):
     if self.executing:
-      msg = '请等待当前上一完成！'
+      msg = '请等待上一操作完成！'
       reply(self.rev,msg)
+      return
     self.executing = True
-    tmux_captured = send_command('c_rollback()\;')
+    tmux_captured = run_tmux_cmd('c_rollback()\;')
     if 'RemoteCommandInput: "c_rollback();"' in tmux_captured:
       msg = '服务器回档指令已发送！请稍后...'
+      reply(self.rev,msg)
     else:
       msg = '服务器回档失败！'
-    reply(self.rev,msg)
+      reply(self.rev,msg)
+      return
 
     time.sleep(1)
     msg = '地上服务器回档中...'
@@ -268,15 +278,19 @@ class dont_starve:
     reply(self.rev,msg)
     self.executing = False
 
-def send_command(cmd, tid=tmux_name):
-  printf(f'执行指令[{LYELLOW}tmux send-keys -t {tid} "{cmd}" Enter;sleep 0.1;tmux capture-pane -pt {tid}{RESET}]')
-  tmux_captured = run(f'tmux send-keys -t {tid} "{cmd}" Enter;sleep 0.1;tmux capture-pane -pt {tid}',shell=True,capture_output=True,encoding='utf-8').stdout
+def run_cmd(cmd):
+  return run(cmd ,shell=True,capture_output=True,encoding='utf-8').stdout
+
+def run_tmux_cmd(cmd, tid=tmux_name):
+  exec_cmd = f'tmux send-keys -t {tid} "{cmd}" Enter;sleep 0.1;tmux capture-pane -pt {tid}'
+  printf(f'执行指令[{LYELLOW}{exec_cmd}{RESET}]')
+  tmux_captured = run_cmd(exec_cmd)
   return tmux_captured
 
 def detect_running():
-  tmux_captured = run(f'tmux ls |grep {tmux_name}',shell=True,capture_output=True,encoding='utf-8').stdout
+  tmux_captured = run_cmd(f'tmux ls |grep {tmux_name}')
   if tmux_captured:
-    tmux_captured = send_command('c_listallplayers()\;')
+    tmux_captured = run_tmux_cmd('c_listallplayers()\;')
     if 'RemoteCommandInput: "c_listallplayers();"' in tmux_captured:
       return 0
     else:
@@ -287,7 +301,7 @@ def detect_running():
 def detect_exited(tid, max_time=60):
   start_time = time.time()
   while(time.time() - start_time <= max_time):
-    tmux_captured = send_command('echo exited', tid)
+    tmux_captured = run_tmux_cmd('echo exited', tid)
     if 'exited' in tmux_captured.split('echo exited')[-1]:
       return True
     time.sleep(3)
@@ -296,7 +310,7 @@ def detect_exited(tid, max_time=60):
 def detect_started(tid, max_time=60):
   start_time = time.time()
   while(time.time() - start_time <= max_time):
-    tmux_captured = send_command('c_listallplayers()\;', tid)
+    tmux_captured = run_tmux_cmd('c_listallplayers()\;', tid)
     if 'RemoteCommandInput: "c_listallplayers();"' in tmux_captured:
       return True
     time.sleep(3)

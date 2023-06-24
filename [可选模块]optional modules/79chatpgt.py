@@ -38,8 +38,6 @@ class chatgpt:
       self.owner_id = f"g{self.group_id}"
     else:
       self.owner_id = f"u{self.user_id}"
-    if self.owner_id not in config:
-      config[self.owner_id] = {"chatgpt_url": "","edgegpt_url": "","webui_url": "","webui_api_path": "/sdapi/v1/txt2img","webui_default_json": {}}
     self.data = gVar.data[self.owner_id]
     
     #群聊@消息以及私聊消息触发
@@ -76,7 +74,7 @@ class chatgpt:
       msg += '\n直接@我发送消息就能和我聊天啦~'
       msg += '\n重置会话 |重置当前会话记忆'
       msg += '\n发送“bing 问题”可以让让我化身New Bing和你聊天~'
-      msg += '\n发送“gpt4 问题”可以让让我更机智的和你和你聊天~'
+      #msg += '\n发送“gpt4 问题”可以让让我更机智的和你和你聊天~'
     reply(self.rev,msg)
 
   def chatgpt(self):
@@ -142,11 +140,11 @@ def text_preprocess(text):
     if re.search(r'\[CQ:image,file=(.*),url', text):
       image_file = re.search(r'\[CQ:image,file=(.*),url', text).groups()[0]
       result = ocr_image({'image': image_file})
-      printf(f'{result}')
+      if gVar.is_debug: printf(f'{result}')
       if status_ok(result):
         discribe = ''.join([x["text"] for x in result["data"]["texts"] if x["confidence"] >= 80])
-        text = re.sub(r'\[CQ:image.*\]', f'[{discribe}]', text)
-        printf(f'{discribe}')
+        text = re.sub(r'\[CQ:image.*\]', f'[图片|内容描述:{discribe}]', text)
+        printf(f'[{module_name}] 解析图片内容:{discribe}')
       else:
         text = re.sub(r'\[CQ:image.*\]', '[图片]', text)
     elif re.search(r'\[CQ:record,.*url=(.*)\]', text):
@@ -155,7 +153,7 @@ def text_preprocess(text):
 
 def get_chatgpt(text, user_name=None, chat_id="temp"):
   post_json = {
-    "message": f"{user_name}:{text}",
+    "message": f"({user_name}对你说){text}",
     "user": str(user_name),
     "bot_id": str(gVar.self_id),
     "chat_id": str(chat_id)
@@ -302,7 +300,4 @@ gVar.func["temp_chatgpt"] = temp_chatgpt
 
 
 
-if ('chatgpt_url' not in config and not config['chatgpt_url']) or ('edgegpt_url' not in config and not config['edgegpt_url']):
-  warnf(f'[{module_name}] 模块已禁用，如需启用请先前部署[https://github.com/acheong08/ChatGPT]或[https://github.com/acheong08/EdgeGPT]')
-else:
-  module_enable(module_name, chatgpt)
+module_enable(module_name, chatgpt)

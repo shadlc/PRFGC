@@ -630,8 +630,8 @@ def dynamic_check():
     except:
       warnf(f"[{module_name}] 爬取动态超时,等待下一轮询重试~")
       time.sleep(3)
-      continue
-    time.sleep(2)
+      return
+    time.sleep(1)
     type_msg = {0: "发布了新动态", 1: "转发了一条动态", 2: "发布了新投稿", 6: "发布了新图文动态", 7: "发布了新文字动态", 8: "发布了新专栏", 9: "发布了新音频"}
     dynamics = get_new_dynamics(uid)
     for dynamic in dynamics:
@@ -653,16 +653,12 @@ def dynamic_check():
 
     dynamics = get_deleted_dynamic(uid)
     deleted_dynamic_list += dynamics
-    count = 0
-    max_i = None
-    if dynamics == []:
-      deleted_dynamic_list = []
-    for i in deleted_dynamic_list:
-      if deleted_dynamic_list.count(i) > count:
-        max_i = i
-        count = deleted_dynamic_list.count(i)
-    if count <= 3:
-      return
+    max_count = 0
+    for item in deleted_dynamic_list:
+      if (count := deleted_dynamic_list.count(item)) > max_count:
+        max_count = count
+    if max_count < 3:
+      continue
     for dynamic in dynamics:
       dynamic_id = dynamic["dynamic_id"]
       author = dynamic["author"]
@@ -674,13 +670,6 @@ def dynamic_check():
           if info['global_notice'] and info['dynamic_notice'] and re.search(info['keyword'], content):
             author = get_name_by_uid(uid)
             msg = ""
-            past_msg = gVar.self_message
-            for i in range(len(past_msg)):
-              if dynamic_id in past_msg[i].get('message'):
-                msg_id = past_msg[i]['message_id']
-                msg += f'[CQ:reply,id={msg_id}]'
-                msg += f'{author}已将这条动态删除啦~'
-                break
             if not detect_image(f'{dynamic_id}.png'):
               msg = f'{author}删除了一条动态~但我没有来得及保存截图~嘤嘤嘤~'
               msg += f'\n\n动态内容：\n{content}'
@@ -777,7 +766,8 @@ def refresh_dynamics(uid):
       dynamics.pop(0)
     new_dynamics[uid] = []
     for i in range(len(dynamics)):
-      if i <= len(dynamics) and dynamics[i].card_type == 18:
+      if dynamics[i].card_type == 18:
+        # 忽略直播通知
         continue
       dynamic_id = dynamics[i].extend.dyn_id_str
       author = dynamics[i].modules[0].module_author.author.name
