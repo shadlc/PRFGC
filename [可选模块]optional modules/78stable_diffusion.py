@@ -77,7 +77,7 @@ def get_stable_diffusion(gen_json):
   try:
     response = requests.post(url=f'{webui_url}{webui_api_path}', json=gen_json)
   except Exception as e:
-    return 500, "未开启AI画图，请联系lc开启！"
+    return 500, "未开启AI画图，请联系管理员开启！"
 
   if response.status_code != 200:
     return response.status_code, response.text

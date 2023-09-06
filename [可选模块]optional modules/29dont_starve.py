@@ -10,7 +10,9 @@ import time
 from subprocess import Popen, PIPE, run
 
 module_name = '饥荒服务器操作模块'
-tmux_name = 'cjc'
+# 使用tmux进行开服，在一个文件夹里面放置地上服务器启动脚本“master.sh”、地下服务器启动脚本“caves.sh”、更新脚本“update.sh”
+# 启动tmux的指令为tmux new -t [tmux_name]，将这个tmux对话分成两个子窗口分别打开地上地下服务器，且光标必须放在第一个窗口上
+tmux_name = ''
 start_master_script = './master.sh'
 start_caves_script = './caves.sh'
 update_script = '../update.sh'
@@ -36,9 +38,9 @@ class dont_starve:
     self.operator_id = self.rev['operator_id'] if 'operator_id' in self.rev else 0
     self.operator_name = get_user_name(str(self.operator_id)) if self.operator_id else ''
 
-    #检测开头#号触发
-    if re.search(r"^#\S+", self.rev_msg):
-      self.rev_msg = self.rev_msg[1:]
+    #检测开头dst触发
+    if re.search(r"^dst\s*\S+", self.rev_msg):
+      self.rev_msg = self.rev_msg[3:].strip()
       if auth<=2 and re.search(r'^帮助$', self.rev_msg): self.help(auth)
       elif auth<=2 and re.search(r'^运行状况$', self.rev_msg): self.status()
       elif auth<=1 and re.search(r'^重启(地上|洞穴)?(服务器)?$', self.rev_msg): self.restart()
@@ -63,7 +65,7 @@ class dont_starve:
       msg += '\n#重启 | 重启或启动服务器'
       msg += '\n#更新 | 手动更新服务器'
       msg += '\n#回档 | 将服务器回档'
-    if auth<=2:
+    elif auth<=2:
       msg = '\n#运行状况 | 查看服务器运行状况'
       msg += '\n#在线玩家 | 查看在线玩家'
       msg += '\n#公告 [文本] | 向服务器发送公告'
@@ -159,10 +161,10 @@ class dont_starve:
     tmux_captured_cave = run_tmux_cmd('c_shutdown()\;', f'{tmux_name}:0.1')
 
     if tmux_captured_master or tmux_captured_cave:
-      msg = '服务器正在重启中，请稍后...'
+      msg = '服务器正在重启中(启动超时3分钟)，请稍后...'
       reply(self.rev,msg)
     else:
-      msg = '服务器正在启动中，请稍后...'
+      msg = '服务器正在启动中(启动超时3分钟)，请稍后...'
       reply(self.rev,msg)
 
     if not (detect_exited(f'{tmux_name}:0.0') and detect_exited(f'{tmux_name}:0.1')):
@@ -172,14 +174,14 @@ class dont_starve:
 
     tmux_captured = run_tmux_cmd(start_master_script, f'{tmux_name}:0.0')
     if not detect_started(f'{tmux_name}:0.0'):
-      msg = '地上服务器启动失败！请联系管理员查看问题！'
+      msg = '地上服务器启动超时或失败！请联系管理员查看问题！'
       reply(self.rev,msg)
       return
     msg = '地上服务器已开启！'
     reply(self.rev,msg)
     tmux_captured = run_tmux_cmd(start_caves_script, f'{tmux_name}:0.1')
     if not detect_started(f'{tmux_name}:0.1'):
-      msg = '洞穴服务器启动失败！请联系管理员查看问题！'
+      msg = '地上服务器启动超时或失败！请联系管理员查看问题！'
       reply(self.rev,msg)
       return
     msg = '洞穴服务器已开启！'
@@ -307,7 +309,7 @@ def detect_exited(tid, max_time=60):
     time.sleep(3)
   return False
 
-def detect_started(tid, max_time=60):
+def detect_started(tid, max_time=180):
   start_time = time.time()
   while(time.time() - start_time <= max_time):
     tmux_captured = run_tmux_cmd('c_listallplayers()\;', tid)
@@ -320,6 +322,6 @@ def detect_started(tid, max_time=60):
 
 
 if tmux_name == '':
-  warnf(f'[{module_name}] 模块已禁用，如需启用请先前先在一个tmux打开两个panel,然后启动一次饥荒服务器之后，将tmux_name填入正确值后使用')
+  warnf(f'[{module_name}] 模块已禁用，如需启用请先将tmux_name填入正确值后使用')
 else:
   module_enable(module_name, dont_starve)

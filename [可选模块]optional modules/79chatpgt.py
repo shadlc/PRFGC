@@ -1,5 +1,7 @@
 #!/usr/bin/python
 #ChatGPT模块处理
+# 该模块需要后端配合方可使用
+
 
 import global_variable as gVar
 from ifunction import *

@@ -20,6 +20,7 @@ module_name = '图片模块'
 data_file = 'data/image_data.json'
 config = import_json(data_file)
 saucenao_api = ''
+# 为了访问pixiv和二维码生成，所搭建的HibiAPI接口
 api_url = config['api_url'] if 'api_url' in config else 'http://127.0.0.1:10777/api/'
 setu_pattern = re.compile(r'^(来|发|看|给|有没有|瑟|涩|se)\S{0,5}(图|瑟|涩|se|好看|好康|可爱)')
 not_enough_pattern = re.compile(r'^(完全|根本|一点也|不够|不太|不行|更|超|很|再|无敌|加大|没好|就这)')

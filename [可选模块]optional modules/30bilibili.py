@@ -19,18 +19,20 @@ nest_asyncio.apply()
 from playwright.__main__ import main
 from playwright.async_api import Browser, async_playwright
 from bilireq.grpc.dynamic import grpc_get_user_dynamics
+from bilireq.dynamic import get_user_dynamics
 from bilireq.live import get_rooms_info_by_uids
 
 
 module_name = '哔哩哔哩模块'
 
+bilibi_SESSDATA = ''
 data_file = 'data/bilibili_data.json'
 follow_list = import_json(data_file)
 loop = asyncio.get_event_loop()
 live_status = {}
 past_dynamics = {}
 new_dynamics = {}
-deleted_dynamic_list = []
+deleted_dynamic_list = {}
 today = time.gmtime().tm_yday
 bilibili_thread = threading.Thread(daemon=True)
 bilibili_thread_running = True
@@ -216,9 +218,13 @@ class bilibili:
           if dynamic:
             name = dynamic[0]
             dynamic_id = dynamic[1]
+            content = dynamic[3]
             msg = f'{name}的最新一条动态：'
             msg += f'\nhttps://t.bilibili.com/{dynamic_id}'
-            msg += f'\n[CQ:image,file=bilibili/{dynamic_id}.png]'
+            if not detect_image(f'{dynamic_id}.png'):
+              msg += "\n" + content
+            else:
+              msg += f'\n[CQ:image,file=bilibili/{dynamic_id}.png]'
           else:
             msg = f'{name}没有发过任何动态...'
         elif flag == '开启':
@@ -386,7 +392,7 @@ class browser:
 
   def __init__(self,proxy=None, **kwargs):
     if proxy:
-        kwargs["proxy"] = {"server": proxy}
+      kwargs["proxy"] = {"server": proxy}
     p = task(async_playwright().start())
     self._browser = task(p.chromium.launch(**kwargs))
 
@@ -396,22 +402,39 @@ class browser:
 
   async def get_dynamic_screenshot(self,dynamic_id, style="mobile"):
     time.sleep(2)
-    if style.lower() == "mobile":
-      return await self.get_dynamic_screenshot_mobile(dynamic_id)
-    else:
-      return await self.get_dynamic_screenshot_pc(dynamic_id)
+    try:
+      if style.lower() == "mobile":
+        return await self.get_dynamic_screenshot_mobile(dynamic_id)
+      else:
+        return await self.get_dynamic_screenshot_pc(dynamic_id)
+    except Exception as e:
+      printf(f"截取动态时发生致命错误!截屏失败！{e}")
+      return
 
   async def get_dynamic_screenshot_mobile(self,dynamic_id):
     """移动端动态截图"""
     url = f"https://m.bilibili.com/dynamic/{dynamic_id}"
     browser = self.get_browser()
-    page = await browser.new_page(
+    context = await browser.new_context(
       device_scale_factor=2,
       user_agent=(
-          "Mozilla/5.0 (iPhone; CPU iPhone OS 14_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0.3 Mobile/15E148 Safari/604.1"
+        "Mozilla/5.0 (iPhone; CPU iPhone OS 14_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0.3 Mobile/15E148 Safari/604.1"
       ),
       viewport={"width": 500, "height": 800},
     )
+    await context.add_cookies(
+      [
+        {'name': 'SESSDATA',
+        'value': bilibi_SESSDATA,
+        'domain': '.bilibili.com',
+        'path': '/',
+        'httpOnly': True,
+        'secure': True,
+        'sameSite': 'Lax'
+        }
+      ]
+    )
+    page = await context.new_page()
     await page.goto(url, wait_until="networkidle", timeout=10000)
     if page.url == "https://m.bilibili.com/404":
         return None
@@ -548,39 +571,42 @@ class browser:
     url = f"https://t.bilibili.com/{dynamic_id}"
     browser = self.get_browser()
     context = await browser.new_context(
-        viewport={"width": 2560, "height": 1080},
-        device_scale_factor=2,
+      viewport={"width": 2560, "height": 1080},
+      device_scale_factor=2,
     )
     await context.add_cookies(
-        [
-            {
-                "name": "hit-dyn-v2",
-                "value": "1",
-                "domain": ".bilibili.com",
-                "path": "/",
-            }
-        ]
+      [
+        {
+          'name': 'SESSDATA',
+          'value': bilibi_SESSDATA,
+          'domain': '.bilibili.com',
+          'path': '/',
+          'httpOnly': True,
+          'secure': True,
+          'sameSite': 'Lax'
+        }
+      ]
     )
     page = await context.new_page()
     try:
-        await page.goto(url, wait_until="networkidle", timeout=10000)
-        if page.url == "https://www.bilibili.com/404":
-            return None
-        card = await page.query_selector(".card")
-        assert card
-        clip = await card.bounding_box()
-        assert clip
-        bar = await page.query_selector(".bili-dyn-action__icon")
-        assert bar
-        bar_bound = await bar.bounding_box()
-        assert bar_bound
-        clip["height"] = bar_bound["y"] - clip["y"]
-        return await page.screenshot(clip=clip, full_page=True)
+      await page.goto(url, wait_until="networkidle", timeout=10000)
+      if page.url == "https://www.bilibili.com/404":
+        return None
+      card = await page.query_selector(".card")
+      assert card
+      clip = await card.bounding_box()
+      assert clip
+      bar = await page.query_selector(".bili-dyn-action__icon")
+      assert bar
+      bar_bound = await bar.bounding_box()
+      assert bar_bound
+      clip["height"] = bar_bound["y"] - clip["y"]
+      return await page.screenshot(clip=clip, full_page=True)
     except Exception:
-        printf(f"截取动态时发生错误：{url}")
-        return await page.screenshot(full_page=True)
+      printf(f"截取动态时发生错误：{url}")
+      return await page.screenshot(full_page=True)
     finally:
-        await context.close()
+      await context.close()
 
 def live_check():
   uids = get_uid_list("live")
@@ -627,7 +653,7 @@ def dynamic_check():
   for uid in uids:
     try:
       refresh_dynamics(uid)
-    except:
+    except Exception as e:
       warnf(f"[{module_name}] 爬取动态超时,等待下一轮询重试~")
       time.sleep(3)
       return
@@ -647,17 +673,22 @@ def dynamic_check():
             if dynamic_type in type_msg: msg = f'{author}{type_msg[dynamic_type]}：'
             else : msg = f'{author}发布了新动态{dynamic_type}：'
             msg += f'\nhttps://t.bilibili.com/{dynamic_id}'
-            msg += f'\n[CQ:image,file=bilibili/{dynamic_id}.png]'
+            if not detect_image(f'{dynamic_id}.png'):
+              msg += "\n" + content
+            else:
+              msg += f'\n[CQ:image,file=bilibili/{dynamic_id}.png]'
             reply_back(owner_id, msg)
             time.sleep(1)
 
     dynamics = get_deleted_dynamic(uid)
-    deleted_dynamic_list += dynamics
+    if not dynamics or uid not in deleted_dynamic_list:
+      deleted_dynamic_list[uid] = []
+    deleted_dynamic_list[uid] += dynamics
     max_count = 0
-    for item in deleted_dynamic_list:
-      if (count := deleted_dynamic_list.count(item)) > max_count:
+    for item in deleted_dynamic_list[uid]:
+      if (count := deleted_dynamic_list[uid].count(item)) > max_count:
         max_count = count
-    if max_count < 3:
+    if max_count < 5:
       continue
     for dynamic in dynamics:
       dynamic_id = dynamic["dynamic_id"]
@@ -675,11 +706,11 @@ def dynamic_check():
               msg += f'\n\n动态内容：\n{content}'
               msg += f'\n\n动态旧地址：https://t.bilibili.com/{dynamic_id}'
             elif msg == "":
-              msg = f'{author}已将此动态已被删除啦~'
+              msg = f'{author}已将此动态删除啦~'
               msg += f'\n[CQ:image,file=bilibili/{dynamic_id}.png]'
             if dynamic in past_dynamics[uid]:
               past_dynamics[uid].remove(dynamic)
-              deleted_dynamic_list = list(filter(lambda x:x!=dynamic,deleted_dynamic_list))
+              deleted_dynamic_list[uid] = list(filter(lambda x:x!=dynamic,deleted_dynamic_list[uid]))
             reply_back(owner_id, msg)
             time.sleep(1)
 
@@ -760,20 +791,41 @@ def update_follow_list_info(input_uid, data):
   save_json(data_file, follow_list)
 
 def refresh_dynamics(uid):
-  dynamics = task(grpc_get_user_dynamics(int(uid), timeout=10, proxy=None)).list
-  if len(dynamics) > 0:
-    if len(dynamics) > 1 and int(dynamics[0].extend.dyn_id_str) <= int(dynamics[1].extend.dyn_id_str):
-      dynamics.pop(0)
-    new_dynamics[uid] = []
-    for i in range(len(dynamics)):
-      if dynamics[i].card_type == 18:
-        # 忽略直播通知
+  # 这些是grpc的方法，暂时用不了
+  # dynamics = task(grpc_get_user_dynamics(int(uid), timeout=10, proxy=None)).list
+  # if len(dynamics) > 0:
+  #   if len(dynamics) > 1 and int(dynamics[0].extend.dyn_id_str) <= int(dynamics[1].extend.dyn_id_str):
+  #     dynamics.pop(0)
+  #   new_dynamics[uid] = []
+  #   for i in range(len(dynamics)):
+  #     if dynamics[i].card_type == 18:
+  #       # 忽略直播通知
+  #       continue
+  #     dynamic_id = dynamics[i].extend.dyn_id_str
+  #     author = dynamics[i].modules[0].module_author.author.name
+  #     dynamic_type = dynamics[i].card_type
+  #     content = dynamics[i].extend.orig_desc[0].text if len(dynamics[i].extend.orig_desc) else ''
+  #     new_dynamics[uid].append({"dynamic_id": dynamic_id, "author": author, "dynamic_type": dynamic_type, "content": content})
+  #   if uid not in past_dynamics:
+  #     past_dynamics[uid] = new_dynamics[uid].copy()
+
+  #这里是正常方法
+  dynamic_list = task(get_user_dynamics(int(uid), timeout=10)).get('cards')
+  if dynamic_list and len(dynamic_list) > 0:
+    dynamics = []
+    for dynamic_json in dynamic_list:
+      if dynamic_json['extra']['is_space_top'] == 1:
         continue
-      dynamic_id = dynamics[i].extend.dyn_id_str
-      author = dynamics[i].modules[0].module_author.author.name
-      dynamic_type = dynamics[i].card_type
-      content = dynamics[i].extend.orig_desc[0].text if len(dynamics[i].extend.orig_desc) else ''
-      new_dynamics[uid].append({"dynamic_id": dynamic_id, "author": author, "dynamic_type": dynamic_type, "content": content})
+      new_dynamics[uid] = []
+      dynamic_card = json.loads(dynamic_json.get('card'))
+      dynamics.append({
+        "dynamic_id": dynamic_json['desc']['dynamic_id'],
+        "author": dynamic_json['desc']['user_profile']['info'].get('uname'),
+        "dynamic_type": '',
+        "content": f"{dynamic_card.get('title')}\n{dynamic_card.get('desc')}{dynamic_card.get('intro')}"
+      })
+    for dynamic in dynamics:
+      new_dynamics[uid].append(dynamic)
     if uid not in past_dynamics:
       past_dynamics[uid] = new_dynamics[uid].copy()
 
@@ -786,8 +838,9 @@ def get_new_dynamics(uid):
       if dynamic_id not in [d["dynamic_id"] for d in past_dynamics[uid]] and int(dynamic_id) >= int(past_dynamics[uid][-1]["dynamic_id"]):
         past_dynamics[uid].insert(i, dynamics[i])
         image = task(Browser.get_dynamic_screenshot(dynamic_id))
-        image_file = f'{dynamic_id}.png'
-        image_save(image_file, image)
+        if image:
+          image_file = f'{dynamic_id}.png'
+          image_save(image_file, image)
         result.append(dynamics[i])
   return result
 
@@ -813,8 +866,9 @@ def get_latest_dynamic(uid):
     author = dynamics[0]["author"]
     content = dynamics[0]["content"]
     image = task(Browser.get_dynamic_screenshot(dynamic_id))
-    image_file = f'{dynamic_id}.png'
-    image_save(image_file, image)
+    if image:
+      image_file = f'{dynamic_id}.png'
+      image_save(image_file, image)
     return [author, dynamic_id, dynamic_type, content]
   return None
 
