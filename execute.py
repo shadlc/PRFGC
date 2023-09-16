@@ -24,8 +24,7 @@ class execute_msg(object):
     
 class execute_notice(object):
   def __init__(self,rev,auth):
-    if 'notice' in locals():
-      notice(rev,auth)
+    notice(rev,auth)
     
 gVar.CMD = {'add': '对添加请求进行操作', 'cqhttp': '查看向CQHttp请求的历史记录', 'debug': '开关调试模式', 'deop': '取消管理员权限', 'device': '设置在线机型', 'exit': '关闭程序', 'get': '获取用户或群的信息', 'group': '修改对接群列表', 'groupmsg': '发送群聊消息', 'groupvoice': '发送群语音消息', 'help': '打开帮助菜单', 'history': '查看历史消息', 'info': '查看CQHttp版本和相关信息', 'msg': '发送私聊消息', 'notice': '发送群公告', 'ocr': '识别图片中的文字', 'op': '增加管理员权限', 'read': '读取转发消息内容', 'recall': '撤回消息', 'restart': '重启程序', 'reload': '重载配置文件', 'request': '手动调用CQHttpAPI', 'reply': '回复上一条消息(不支持快捷撤回)', 'say': '向主对接群发送消息', 'set': '设置变量', 'slience': '静默模式', 'stop': '关闭程序', 'test': '测试接口', 'voice': '发送语音消息'}
 class execute_cmd(object):

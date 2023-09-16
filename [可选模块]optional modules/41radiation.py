@@ -143,13 +143,15 @@ def request_radiation(query_type='all'):
       data_type = 'province'
       res = requests.post(
           'https://data.rmtc.org.cn/gis/DoAction.action',
-          data = '{"action":"doDataRequest","dest":"curProvData","operation":"query","parameter":{"type":0}}'
+          data = '{"action":"doDataRequest","dest":"curProvData","operation":"query","parameter":{"type":0}}',
+          timeout=(5, 5)
       )
     else:
       data_type = 'all'
       res = requests.post(
           'https://data.rmtc.org.cn/gis/DoAction.action',
-          data = '{"action":"doDataRequest","dest":"stationList","operation":"query","parameter":{"type":-1}}'
+          data = '{"action":"doDataRequest","dest":"stationList","operation":"query","parameter":{"type":-1}}',
+          timeout=(5, 5)
       )
     resource = json.loads(res.text)
     code = res.status_code

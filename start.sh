@@ -8,7 +8,7 @@ is_restart=1
 
 while (($is_restart))
 do
- python3.8 robot.py
+ python robot.py
  is_restart=$?
 done
 

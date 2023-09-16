@@ -8,4 +8,3 @@ nest_asyncio
 jieba
 stylecloud
 PicImageSearch
-pyecharts

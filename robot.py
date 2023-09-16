@@ -27,11 +27,11 @@ if sysytem_platform == 'Linux':
 	import readline
 	#命令自动补全
 	def completer(text, state):
-		options = [cmd for cmd in gVar.CMD.keys() if cmd.startswith(text)]
-		if state < len(options):
-			return options[state]
-		else:
-			return None
+	    options = [cmd for cmd in gVar.CMD.keys() if cmd.startswith(text)]
+	    if state < len(options):
+	        return options[state]
+	    else:
+	        return None
 	readline.parse_and_bind("tab: complete")
 	readline.set_completer(completer)
 

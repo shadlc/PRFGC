@@ -818,11 +818,15 @@ def refresh_dynamics(uid):
         continue
       new_dynamics[uid] = []
       dynamic_card = json.loads(dynamic_json.get('card'))
+      title = dynamic_card.get('title') if 'title' in dynamic_card else ''
+      intro = dynamic_card.get('intro') if 'intro' in dynamic_card else ''
+      content = dynamic_card.get('item').get('content') if 'item' in dynamic_card else ''
+      desc = dynamic_card.get('desc') if 'desc' in dynamic_card else ''
       dynamics.append({
         "dynamic_id": dynamic_json['desc']['dynamic_id'],
         "author": dynamic_json['desc']['user_profile']['info'].get('uname'),
         "dynamic_type": '',
-        "content": f"{dynamic_card.get('title')}\n{dynamic_card.get('desc')}{dynamic_card.get('intro')}"
+        "content": f"{content}{title}\n{intro}{desc}"
       })
     for dynamic in dynamics:
       new_dynamics[uid].append(dynamic)

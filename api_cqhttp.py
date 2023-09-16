@@ -161,11 +161,11 @@ def get_version_info():
   result = get_request('/get_version_info')
   if 'status' in result and result['status'] == 'ok':
     device = ''
-    if 0 == result['data']['protocol']: device = 'iPad'
-    elif 1 == result['data']['protocol']: device = '安卓设备'
-    elif 2 == result['data']['protocol']: device = '安卓手表'
-    elif 3 == result['data']['protocol']: device = 'MacOS'
-    elif 4 == result['data']['protocol']: device = '企点设备'
+    if 0 == result['data']['protocol_name']: device = 'iPad'
+    elif 1 == result['data']['protocol_name']: device = '安卓设备'
+    elif 2 == result['data']['protocol_name']: device = '安卓手表'
+    elif 3 == result['data']['protocol_name']: device = 'MacOS'
+    elif 4 == result['data']['protocol_name']: device = '企点设备'
     else: device = '未知设备'
     return {'app_name':result['data']['app_name'],'app_version':result['data']['app_version'],'runtime_os':result['data']['runtime_os'],'device':device}
   else:

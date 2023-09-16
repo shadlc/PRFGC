@@ -281,6 +281,28 @@ def send_forward_msg(group_id, node):
   :param node: 转发消息内容物
   :return: 发送消息后返回的json信息
   """
+  return send_group_forward_msg(group_id, node)
+
+def send_private_forward_msg(user_id, node):
+  """
+  发送私聊转发消息
+  :param group_id: 发送到QQ号
+  :param node: 转发消息内容物
+  :return: 发送消息后返回的json信息
+  """
+  data = {'user_id': user_id, 'messages': node}
+  result = post_request("/send_private_forward_msg", data)
+  if 'status' in result and result['status'] == 'ok':
+    gVar.self_message.append(get_msg({'message_id':result['data']['message_id']})['data'])
+  return result
+
+def send_group_forward_msg(group_id, node):
+  """
+  发送群聊转发消息
+  :param group_id: 发送到群ID
+  :param node: 转发消息内容物
+  :return: 发送消息后返回的json信息
+  """
   data = {'group_id': group_id, 'messages': node}
   result = post_request("/send_group_forward_msg", data)
   if 'status' in result and result['status'] == 'ok':

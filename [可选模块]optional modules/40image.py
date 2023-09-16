@@ -53,7 +53,7 @@ class image:
       self.owner_id = f'u{self.user_id}'
     self.data = gVar.data[self.owner_id]
     if self.owner_id not in config:
-    	config[self.owner_id] = {'R18':False}
+      config[self.owner_id] = {'R18':False}
     self.config = config[self.owner_id] 
 
     #群聊@消息以及私聊消息触发
@@ -132,17 +132,20 @@ class image:
         msg = await image_search_google(image_url, proxies)
       else:
         msg = await image_search_baidu(image_url)
-    except:
-      msg = '访问失败，无法访问该网站进行搜索~'
+    except Exception as e:
+      msg = f'访问失败，无法访问该网站进行搜索~ 错误原因：{e}'
       search_success = False
     if msg == '':
       msg = f'%ROBOT_NAME%好像没有搜到相关结果呢~'
       reply(self.rev,msg)
     else:
-      if search_success and self.group_id:
+      if search_success:
         msg_list = []
         msg_list.append({'type': 'node', 'data': {'name': gVar.self_name, 'uin': gVar.self_id, 'content': msg}})
-        send_forward_msg(self.group_id, msg_list)
+        if self.group_id:
+          send_group_forward_msg(self.group_id, msg_list)
+        else:
+          send_private_forward_msg(self.user_id, msg_list)
       else:
         reply(self.rev,msg)
 
@@ -174,34 +177,25 @@ class image:
       else:
         reply(self.rev,QA_get('!!处理中') + f'共有{len(resp["illusts"])}张图片~')
         image_times = 0
+        msg_list = []
+        content = f'Pixiv{rank_type}排行第{page}页'
+        msg_list.append({'type': 'node', 'data': {'name': gVar.self_name, 'uin': gVar.self_id, 'content': content}})
+        for illust in resp["illusts"]:
+          if r18_mode or illust['sanity_level'] != 6:
+            image_times+=1
+            url = filter_pixiv_url(illust)
+            content = f'{image_times}.{illust["user"]["name"]}的作品\n{illust["title"]}({illust["id"]})\n[CQ:image,file={url["example_url"]}]'
+            msg_list.append({'type': 'node', 'data': {'name': gVar.self_name, 'uin': gVar.self_id, 'content': content}})
+          elif r18_mode:
+            image_times+=1
+            url = filter_pixiv_url(illust)
+            content = f'{image_times}.{illust["user"]["name"]}的作品\n{illust["title"]}({illust["id"]})\n{url["example_url"]}\n'
+            msg_list.append({'type': 'node', 'data': {'name': gVar.self_name, 'uin': gVar.self_id, 'content': content}})
+
         if self.group_id:
-          msg_list = []
-          content = f'Pixiv{rank_type}排行第{page}页'
-          msg_list.append({'type': 'node', 'data': {'name': gVar.self_name, 'uin': gVar.self_id, 'content': content}})
-          for illust in resp["illusts"]:
-            if r18_mode or illust['sanity_level'] != 6:
-              image_times+=1
-              url = filter_pixiv_url(illust)
-              content = f'{image_times}.{illust["user"]["name"]}的作品\n{illust["title"]}({illust["id"]})\n[CQ:image,file={url["example_url"]}]'
-              msg_list.append({'type': 'node', 'data': {'name': gVar.self_name, 'uin': gVar.self_id, 'content': content}})
-            elif r18_mode:
-              image_times+=1
-              url = filter_pixiv_url(illust)
-              content = f'{image_times}.{illust["user"]["name"]}的作品\n{illust["title"]}({illust["id"]})\n{url["example_url"]}\n'
-              msg_list.append({'type': 'node', 'data': {'name': gVar.self_name, 'uin': gVar.self_id, 'content': content}})
-          send_forward_msg(self.group_id, msg_list)
+          send_group_forward_msg(self.group_id, msg_list)
         else:
-          msg = f'Pixiv{rank_type}排行第{page}页\n\n'
-          for illust in resp["illusts"]:
-            if r18_mode or illust['sanity_level'] != 6:
-              image_times+=1
-              url = filter_pixiv_url(illust)
-              msg += f'\n{image_times}.{illust["user"]["name"]}的作品\n{illust["title"]}({illust["id"]})\n[CQ:image,file={url["example_url"]}]'
-            elif r18_mode:
-              image_times+=1
-              url = filter_pixiv_url(illust)
-              msg += f'\n{image_times}.{illust["user"]["name"]}的作品\n{illust["title"]}({illust["id"]})\n{url["example_url"]}\n)'
-          reply(self.rev,msg)
+          send_private_forward_msg(self.user_id, msg_list)
     else:
       msg = f'可查询的排行类别有{list(rank_type_dict.keys())}，如[图月排行]'
       reply(self.rev,msg)
@@ -281,34 +275,24 @@ class image:
         if len(illusts):
           reply(self.rev, f'共寻找到{len(illusts)}张符合要求的图片，整理中~')
           image_times = 0
+          msg_list = []
+          content = f'Pixiv搜索页面\n标签:{words}\n收藏数大于：{min_bookmarks}\n已筛选张数：{len(resp["illusts"])}\n有效页数：{page_valid}\n有效张数：{len(resp)}'
+          msg_list.append({'type': 'node', 'data': {'name': gVar.self_name, 'uin': gVar.self_id, 'content': content}})
+          for illust in illusts:
+            if r18_mode or illust['sanity_level'] != 6:
+              image_times+=1
+              url = filter_pixiv_url(illust)
+              content = f'{image_times}.{illust["user"]["name"]}的作品\n{illust["title"]}({illust["id"]})\n[CQ:image,file={url["example_url"]}]'
+              msg_list.append({'type': 'node', 'data': {'name': gVar.self_name, 'uin': gVar.self_id, 'content': content}})
+            elif r18_mode:
+              image_times+=1
+              url = filter_pixiv_url(illust)
+              content = f'{image_times}.{illust["user"]["name"]}的作品\n{illust["title"]}({illust["id"]})\n{url["example_url"]}\n'
+              msg_list.append({'type': 'node', 'data': {'name': gVar.self_name, 'uin': gVar.self_id, 'content': content}})
           if self.group_id:
-            msg_list = []
-            content = f'Pixiv搜索页面\n标签:{words}\n收藏数大于：{min_bookmarks}\n已筛选张数：{len(resp["illusts"])}\n有效页数：{page_valid}\n有效张数：{len(resp)}'
-            msg_list.append({'type': 'node', 'data': {'name': gVar.self_name, 'uin': gVar.self_id, 'content': content}})
-            for illust in illusts:
-              if r18_mode or illust['sanity_level'] != 6:
-                image_times+=1
-                url = filter_pixiv_url(illust)
-                content = f'{image_times}.{illust["user"]["name"]}的作品\n{illust["title"]}({illust["id"]})\n[CQ:image,file={url["example_url"]}]'
-                msg_list.append({'type': 'node', 'data': {'name': gVar.self_name, 'uin': gVar.self_id, 'content': content}})
-              elif r18_mode:
-                image_times+=1
-                url = filter_pixiv_url(illust)
-                content = f'{image_times}.{illust["user"]["name"]}的作品\n{illust["title"]}({illust["id"]})\n{url["example_url"]}\n'
-                msg_list.append({'type': 'node', 'data': {'name': gVar.self_name, 'uin': gVar.self_id, 'content': content}})
-            send_forward_msg(self.group_id, msg_list)
+            send_group_forward_msg(self.group_id, msg_list)
           else:
-            msg = f'Pixiv搜索页面\n标签:{words}\n收藏数大于：{min_bookmarks}\n已筛选张数：{len(resp["illusts"])}\n有效页数：{page_valid}\n有效张数：{len(resp)}\n\n'
-            for illust in illusts:
-              if r18_mode or illust['sanity_level'] != 6:
-                image_times+=1
-                url = filter_pixiv_url(illust)
-                msg += f'\n{image_times}.{illust["user"]["name"]}的作品\n{illust["title"]}({illust["id"]})\n[CQ:image,file={url["example_url"]}]'
-              elif r18_mode:
-                image_times+=1
-                url = filter_pixiv_url(illust)
-                msg += f'\n{image_times}.{illust["user"]["name"]}的作品\n{illust["title"]}({illust["id"]})\n{url["example_url"]}\n'
-            reply(self.rev, msg)
+            send_private_forward_msg(self.user_id, msg_list)
         else:
           msg = f'已在{page_valid}张有效页内筛选{len(resp["illusts"])}张图，但是仍未找到符合要求的图片，可以尝试将收藏数降低'
           reply(self.rev, msg)
@@ -510,14 +494,17 @@ async def image_search_google(image_url, proxies=None):
   resp = await Google(proxies=proxies).search(image_url)
   images = []
   for i in resp.raw[:10]:
-    if i.title and i.similarity:
-      images.append(i)
+    images.append(i)
+  with open('google.txt', "w+") as f:
+    json.dump(resp.origin, f)
   if num := len(images):
     msg = f'使用谷歌识图搜索到了{num}个结果\n\n'
     for i in images:
-      msg += f'\n{i.title}'
+      image = i.thumbnail
+      if "base64," in image:
+        image = "base64://" + i.thumbnail.split("base64,")[1]
       msg += f'\n链接: {i.url}'
-      msg += f'\n[CQ:image,url={i.thumbnail}]'
+      msg += f'\n[CQ:image,file={image}]'
       msg += f'\n'
     return msg
   else:
@@ -527,16 +514,14 @@ async def image_search_baidu(image_url, proxies=None):
   resp = await BaiDu(proxies=proxies).search(image_url)
   images = []
   for i in resp.raw[:10]:
-    if i.title and i.similarity:
-      images.append(i)
+    images.append(i)
+  with open('baidu.txt', "w+") as f:
+    json.dump(resp.origin, f)
   if num := len(images):
     msg = f'使用百度识图搜索到了{num}个结果\n'
     for i in images:
-      printf(i.origin)
-      msg += f'\n{i.title}'
-      msg += f'\n相似度: {i.similarity}%'
       msg += f'\n原文地址: {i.url}'
-      msg += f'\n[CQ:image,file={i.thumbnail}]'
+      msg += f'\n[CQ:image,url={i.thumbnail}]'
       msg += f'\n'
     return msg
   else:
@@ -547,7 +532,6 @@ def time_format(seconds):
   h, m = divmod(m, 60)
   #return f'{h:d}:{m:02d}:{s:02d}'
   return f'{m:02d}:{s:02d}'
-
 
 
 module_enable(module_name, image)
