@@ -25,7 +25,7 @@ from bilireq.live import get_rooms_info_by_uids
 
 module_name = '哔哩哔哩模块'
 
-bilibi_SESSDATA = ''
+bilibi_SESSDATA = '47d903c7%2C1705882930%2C3fd45%2A72-t-nT0guP1m6sG7BCZDA-GoqVjRp_IniUxWNuTqd44fCxl7KSHcVSzOFI_CXhJ_eR-x63wAATgA'
 data_file = 'data/bilibili_data.json'
 follow_list = import_json(data_file)
 loop = asyncio.get_event_loop()
@@ -278,14 +278,14 @@ class bilibili:
           if uid not in self.follow_list:
             msg = '请先关注UP主~'
           else:
-            self.follow_list[uid]['live_status'] = True
+            self.follow_list[uid]['live_notice'] = True
             follow_list_save(self.owner_id, self.follow_list)
             msg = f'已开启对{name}的直播通知~'
         elif flag == '关闭':
           if uid not in self.follow_list:
             msg = '请先关注UP主~'
           else:
-            self.follow_list[uid]['live_status'] = False
+            self.follow_list[uid]['live_notice'] = False
             follow_list_save(self.owner_id, self.follow_list)
             msg = f'已关闭对{name}的直播通知~'
       else:
