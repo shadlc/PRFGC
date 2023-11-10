@@ -22,8 +22,8 @@ config = import_json(data_file)
 saucenao_api = ''
 # 为了访问pixiv和二维码生成，所搭建的HibiAPI接口
 api_url = config['api_url'] if 'api_url' in config else 'http://127.0.0.1:10777/api/'
-setu_pattern = re.compile(r'^(来|发|看|给|有没有|瑟|涩|se)\S{0,5}(图|瑟|涩|se|好看|好康|可爱)')
-not_enough_pattern = re.compile(r'^(完全|根本|一点也|不够|不太|不行|更|超|很|再|无敌|加大|没好|就这)')
+setu_pattern = re.compile(r'(来|发|看|给|有没有|瑟|涩|se)\S{0,5}(图|瑟|涩|se|好看|好康|可爱)')
+not_enough_pattern = re.compile(r'(完全|根本|一点也|不够|不太|不行|更|超|很|再|无敌|加大|没好|就这)')
 
 class image:
   def __init__(self,rev,auth):
@@ -352,18 +352,21 @@ class image:
     data_save(self.owner_id, self.config)
     reply(self.rev,msg)
 
-  def lolicon_image(self,r18):
+  def lolicon_image(self, r18_mode):
     tags = ''
     if len(self.rev_msg.split(' '))>1:
       for tag in self.rev_msg.split(' ')[1:]:
         tags += '&tag=' + tag
-    if self.config['R18'] and re.search(not_enough_pattern, self.rev_msg): r18=1
-    resp = get_lolicon_image(r18, tags)
+    if self.config['R18'] and re.search(not_enough_pattern, self.rev_msg): r18_mode=1
+    resp = get_lolicon_image(r18_mode, tags)
     if resp != '':
       author = f'{resp["author"]}(uid:{resp["uid"]})'
       title = f'{resp["title"]}(pid:{resp["pid"]})'
       url = resp['urls']['regular']
-      msg = f'来自画师{author}的作品{title}[CQ:image,file={url}]'
+      if r18_mode:
+        msg = f'来自画师{author}的作品{title}\n{url}'
+      else:
+        msg = f'来自画师{author}的作品{title}[CQ:image,file={url}]'
     else:
       msg = '未找到该标签的图片'
     reply(self.rev, msg)
@@ -385,17 +388,17 @@ def data_save(owner_id, one_config):
   config[owner_id] = one_config
   save_json(data_file, config)
 
-def get_lolicon_image(r18=0,tags=''):
+def get_lolicon_image(r18_mode=0, tags=''):
   """
   获取LoliconAPI图片
-  :param r18: 是否获取R18图片
+  :param r18_mode: 是否获取R18图片
   :param tags: 需要筛选的标签
   :return: 图片链接
   """
   url = 'https://api.lolicon.app/setu/v2'
-  url += f'?size=regular&r18={r18}{tags}'
+  url += f'?size=regular&r18={r18_mode}{tags}'
   resp = json.loads(requests.get(url).text)
-  if gVar.is_debug: printf(f'调用LoliconAPI返回结果：{resp}')
+  if gVar.is_debug: printf(f'调用LoliconAPI{LYELLOW}({url}){RESET}返回结果：{resp}')
   if resp['data'] == []:
     return ''
   else:

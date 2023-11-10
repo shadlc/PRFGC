@@ -17,7 +17,7 @@ from api_cqhttp import *
 module_name = '消息处理模块'
 
 stopwords_file = 'data/stopwords.txt'
-font_file = ''
+font_file = 'data/AlibabaPuHuiTi95.ttf'
 data_file = 'data/chat_log.json'
 chat_log_dir = 'data/chat_log/'
 if not os.path.exists(chat_log_dir):

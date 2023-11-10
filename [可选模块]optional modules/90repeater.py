@@ -5,6 +5,9 @@ import global_variable as gVar
 from ifunction import *
 from api_cqhttp import *
 
+import re
+import random
+
 module_name = '复读机模块'
 
 data_file = 'data/repeater_data.json'
@@ -59,6 +62,9 @@ class repeater:
     printf(f'{LBLUE}[RECEIVE]{RESET}在群{LPURPLE}{self.group_name}({self.group_id}){RESET}检测到来自{LPURPLE}{self.user_name}({self.user_id}){RESET}的多次复读：{self.rev_msg}')
     if str(self.data.past_message).count("Already_Repeat"):
       printf('短时间内已复读过，不再进行复读')
+      self.success = False
+    elif re.search(r'image,subType=1', self.rev_msg):
+      printf('消息包含表情包，防止发送异常，不进行复读')
       self.success = False
     else:
       repeat_count = re.sub(r',url=.*?]',']', str(self.data.past_message)).count(f"'message': '{self.rev_msg}'")

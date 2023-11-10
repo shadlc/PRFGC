@@ -12,7 +12,7 @@ from subprocess import Popen, PIPE, run
 module_name = '饥荒服务器操作模块'
 # 使用tmux进行开服，在一个文件夹里面放置地上服务器启动脚本“master.sh”、地下服务器启动脚本“caves.sh”、更新脚本“update.sh”
 # 启动tmux的指令为tmux new -t [tmux_name]，将这个tmux对话分成两个子窗口分别打开地上地下服务器，且光标必须放在第一个窗口上
-tmux_name = ''
+tmux_name = 'dst'
 start_master_script = './master.sh'
 start_caves_script = './caves.sh'
 update_script = '../update.sh'

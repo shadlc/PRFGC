@@ -1,7 +1,5 @@
 #!/usr/bin/python
 #ChatGPT模块处理
-# 该模块需要后端配合方可使用
-
 
 import global_variable as gVar
 from ifunction import *
@@ -41,32 +39,33 @@ class chatgpt:
     else:
       self.owner_id = f"u{self.user_id}"
     self.data = gVar.data[self.owner_id]
-    
-    #群聊@消息以及私聊消息触发
-    if not self.group_id or gVar.at_info in self.rev_msg:
-      if self.group_id: self.rev_msg = self.rev_msg.replace(gVar.at_info,'').strip()
-      if False: self.chatgpt_help(auth)
-      elif auth<=3 and re.search(r'^重置(会话|对话|聊天)$',self.rev_msg): self.reset_conv(auth)
-      # elif auth<=3 and re.search(r'^gpt4 ',self.rev_msg): self.gpt4()
-      elif auth<=3 and re.search(r'^bing ',self.rev_msg): self.edgegpt()
-      elif auth<=3: self.chatgpt()
-      else: self.success = False
-
-    # #检测开头"gpt4"触发
-    # elif re.search(r'^gpt4 ',self.rev_msg):
-    #   if self.group_id: self.rev_msg = self.rev_msg.replace(gVar.at_info,"").strip()
-    #   self.gpt4()
-
-    #检测开头"bing"触发
-    elif re.search(r'^bing ',self.rev_msg):
-      if self.group_id: self.rev_msg = self.rev_msg.replace(gVar.at_info,"").strip()
-      self.edgegpt()
 
     #检测开头#号触发
-    elif re.search(r"^#\S+", self.rev_msg):
+    if re.search(r"^#\S+", self.rev_msg):
       self.rev_msg = self.rev_msg[1:]
       if self.group_id: self.rev_msg = self.rev_msg.replace(gVar.at_info,"").strip()
       if auth<=3: self.chatgpt()
+      else: self.success = False
+    #检测开头"gpt4"触发
+    elif re.search(r'^gpt4 ',self.rev_msg):
+      self.rev_msg = self.rev_msg[5:]
+      if self.group_id: self.rev_msg = self.rev_msg.replace(gVar.at_info,"").strip()
+      self.gpt4()
+
+    #检测开头"bing"触发
+    elif re.search(r'^bing ',self.rev_msg):
+      self.rev_msg = self.rev_msg[5:]
+      if self.group_id: self.rev_msg = self.rev_msg.replace(gVar.at_info,"").strip()
+      self.edgegpt()
+    
+    #群聊@消息以及私聊消息触发
+    elif not self.group_id or gVar.at_info in self.rev_msg:
+      if self.group_id: self.rev_msg = self.rev_msg.replace(gVar.at_info,'').strip()
+      if re.search(r'^GPT帮助 ',self.rev_msg): self.chatgpt_help(auth)
+      elif auth<=3 and re.search(r'^重置(会话|对话|聊天)$',self.rev_msg): self.reset_conv(auth)
+      elif auth<=3 and re.search(r'^gpt4 ',self.rev_msg): self.gpt4()
+      elif auth<=3 and re.search(r'^bing ',self.rev_msg): self.edgegpt()
+      elif auth<=3: self.chatgpt()
       else: self.success = False
     else: self.success = False
 
@@ -76,12 +75,35 @@ class chatgpt:
       msg += '\n直接@我发送消息就能和我聊天啦~'
       msg += '\n重置会话 |重置当前会话记忆'
       msg += '\n发送“bing 问题”可以让让我化身New Bing和你聊天~'
-      #msg += '\n发送“gpt4 问题”可以让让我更机智的和你和你聊天~'
+      msg += '\n发送“gpt4 问题”可以让让我更机智的和你和你聊天~'
     reply(self.rev,msg)
 
   def chatgpt(self):
+    if re.search(r'\[CQ:reply,id=(.*)\]', self.rev_msg):
+      printf(f"reply")
+      msg_id = re.search(r'\[CQ:reply,id=([^\]]+)\]', self.rev_msg).groups()[0]
+      reply_msg_data = get_msg({"message_id": msg_id})['data']
+      sender = ''
+      reply_msg = ''
+      if reply_msg_data:
+        reply_msg = re.sub(r'\[CQ:(json|xml|forward|reply),.*\]', '', reply_msg_data.get('message'))
+        sender = reply_msg_data.get('sender')
+      latest_msg = get_chatgpt_latest_ask(f"{gVar.self_id}{self.owner_id}")
+      if not latest_msg or reply_msg_data and latest_msg not in reply_msg:
+        if sender.get('user_id') == gVar.self_id:
+          content = [{"role": "assistant", "content": reply_msg}]
+        else:
+          nick_name = sender.get('nickname')
+          content = [{"role": "user", "content": f"({nick_name}说){reply_msg}"}]
+        add_chatgpt_convo(content, f"{gVar.self_id}{self.owner_id}")
+
     text = text_preprocess(self.rev_msg)
-    msg = get_chatgpt(text, self.user_name, self.owner_id)
+    if re.search(r"^重置(会话|对话|聊天)$", text):
+      msg = reset_chatgpt_conv(f"{gVar.self_id}{self.owner_id}")
+    else:
+      msg = get_chatgpt(text, self.user_name, self.owner_id)
+      msg = msg if msg else '[ChatGPT] 返回为空'
+
     if re.search(r"\[paint_prompt:.+\]", msg):
       prompt = re.search(r"(\[paint_prompt:.+\])", msg).groups()[0]
       printf(f'{LYELLOW}[{module_name}]{RESET} 向StableDiffusion获取画作: {prompt}')
@@ -95,13 +117,33 @@ class chatgpt:
       reply(self.rev, self.reply_code() + msg)
 
   def gpt4(self):
-    text = text_preprocess(self.rev_msg[5:])
-    msg = get_gpt4(text, self.user_name, self.owner_id)
+    if re.search(r'\[CQ:reply,id=(.*)\]', self.rev_msg):
+      msg_id = re.search(r'\[CQ:reply,id=([^\]]+)\]', self.rev_msg).groups()[0]
+      reply_msg_data = get_msg({"message_id": msg_id})['data']
+      sender = ''
+      if reply_msg_data:
+        reply_msg = re.sub(r'\[CQ:(json|xml|forward|reply),.*\]', '', reply_msg_data.get('message'))
+        sender = reply_msg_data.get('sender')
+      latest_msg = get_gpt4_latest_ask(f"{gVar.self_id}{self.owner_id}")
+      if not latest_msg or reply_msg_data and latest_msg not in reply_msg:
+        if sender.get('user_id') == gVar.self_id:
+          content = [{"role": "assistant", "content": reply_msg}]
+        else:
+          nick_name = sender.get('nickname')
+          content = [{"role": "user", "content": f"({nick_name}说){reply_msg}"}]
+        add_gpt4_convo(content, f"{gVar.self_id}{self.owner_id}")
+
+    text = text_preprocess(self.rev_msg)
+    if re.search(r"^重置(会话|对话|聊天)$", text):
+      msg = reset_gpt4_conv(f"{gVar.self_id}{self.owner_id}")
+    else:
+      msg = get_gpt4(text, self.user_name, self.owner_id)
+      msg = msg if msg else '[GPT4] 返回为空'
+
     reply(self.rev, self.reply_code() + msg)
 
   def edgegpt(self):
-    text = text_preprocess(self.rev_msg[5:])
-
+    text = text_preprocess(self.rev_msg)
     if re.search(r"^重置(会话|对话|聊天)$", text):
       msg = reset_edgegpt_conv(f"{gVar.self_id}{self.owner_id}")
     else:
@@ -116,14 +158,20 @@ class chatgpt:
         time.sleep(2)
       reply(self.rev, self.reply_code() + "[New Bing] 正在处理中...")
       msg = get_edgegpt(text, self.user_name, self.owner_id)
+      msg = msg if msg else '[New Bing] 返回为空'
+
     reply(self.rev, self.reply_code() + msg)
 
   def reset_conv(self, auth):
     if not self.group_id or auth <= 2:
-      if reset_chatgpt_conv(f"{gVar.self_id}{self.owner_id}"):
-        msg = "[ChatGPT] 此会话记忆已清除"
-      else:
-        msg = "[ChatGPT] 重置会话出错！"
+      msg = reset_chatgpt_conv(f"{gVar.self_id}{self.owner_id}")
+    else:
+      msg = "您无权限这样做！"
+    reply(self.rev, msg)
+
+  def reset_gpt4_conv(self, auth):
+    if not self.group_id or auth <= 2:
+      msg = reset_gpt4_conv(f"{gVar.self_id}{self.owner_id}")
     else:
       msg = "您无权限这样做！"
     reply(self.rev, msg)
@@ -138,20 +186,20 @@ class chatgpt:
 
 
 def text_preprocess(text):
-    text = re.sub(r'\[CQ:(json|xml|forward|reply),.*\]', '', text)
-    if re.search(r'\[CQ:image,file=(.*),url', text):
-      image_file = re.search(r'\[CQ:image,file=(.*),url', text).groups()[0]
-      result = ocr_image({'image': image_file})
-      if gVar.is_debug: printf(f'{result}')
-      if status_ok(result):
-        discribe = ''.join([x["text"] for x in result["data"]["texts"] if x["confidence"] >= 80])
-        text = re.sub(r'\[CQ:image.*\]', f'[图片|内容描述:{discribe}]', text)
-        printf(f'[{module_name}] 解析图片内容:{discribe}')
-      else:
-        text = re.sub(r'\[CQ:image.*\]', '[图片]', text)
-    elif re.search(r'\[CQ:record,.*url=(.*)\]', text):
-      text = re.sub(r'\[CQ:record.*\]', '[语言]', text)
-    return text
+  text = re.sub(r'\[CQ:(json|xml|forward|reply),.*\]', '', text)
+  if re.search(r'\[CQ:image,file=([^,]*)(.*),url', text):
+    image_file = re.search(r'\[CQ:image,file=([^,]*)(.*),url', text).groups()[0]
+    result = ocr_image({'image': image_file})
+    if gVar.is_debug: printf(f'图片为{image_file}，解析结果为{result}')
+    if status_ok(result):
+      discribe = ''.join([x["text"] for x in result["data"]["texts"] if x["confidence"] >= 80])
+      text = re.sub(r'\[CQ:image.*\]', f'[图片|内容描述:{discribe}]', text)
+      printf(f'[{module_name}] 解析图片内容:{discribe}')
+    else:
+      text = re.sub(r'\[CQ:image.*\]', '[图片]', text)
+  elif re.search(r'\[CQ:record,.*url=(.*)\]', text):
+    text = re.sub(r'\[CQ:record.*\]', '[语言]', text)
+  return text
 
 def get_chatgpt(text, user_name=None, chat_id="temp"):
   post_json = {
@@ -174,42 +222,130 @@ def get_chatgpt(text, user_name=None, chat_id="temp"):
     return response
 gVar.func["get_chatgpt"] = get_chatgpt
 
-def get_gpt4(text, user_name=None, chat_id="temp"):
+def get_chatgpt_latest_ask(convo_id):
   post_json = {
-    "message": f"{user_name}:{text}",
-    "user": str(user_name),
-    "bot_id": str(gVar.self_id),
-    "chat_id": str(chat_id)
+    "convo_id": convo_id
   }
-  if gVar.is_debug: printf(f"调用 GPT4Free API (/chat)：{post_json}")
+  if gVar.is_debug: printf(f"调用 ChatGPT API (/latest)：{post_json}")
   dat = json.dumps(post_json)
   response = ""
   try:
-    response = requests.post(config["gpt4_url"]+"/chat", headers={"Content-Type": "application/json"}, data=dat).json()
+    response = requests.post(config["chatgpt_url"]+"/latest", headers={"Content-Type": "application/json"}, data=dat)
   except:
-    return "[GPT4Free] 连接故障！"
-  if "response" not in response:
-    return json.dumps(response)
+    return ''
+  if response.status_code == 200:
+    response = response.json()
+    return response["response"]
   else:
-    # response = html.unescape(response["response"])
-    return response
-gVar.func["get_gpt4"] = get_gpt4
+    return ''
 
-def reset_chatgpt_conv(chat_id):
+def add_chatgpt_convo(content, convo_id):
   post_json = {
-    "convo_id": chat_id
+    "content": content,
+    "convo_id": convo_id
   }
-  if gVar.is_debug: printf(f"调用 ChatGPT API (/reset)：{post_json}")
+  if gVar.is_debug: printf(f"调用 ChatGPT API (/add)：{post_json}")
   dat = json.dumps(post_json)
   response = ""
   try:
-    response = requests.post(config["chatgpt_url"]+"/reset", headers={"Content-Type": "application/json"}, data=dat)
+    response = requests.post(config["chatgpt_url"]+"/add", headers={"Content-Type": "application/json"}, data=dat)
   except:
     return False
   if response.status_code == 200:
     return True
   else:
     return False
+
+def reset_chatgpt_conv(convo_id):
+  post_json = {
+    "convo_id": convo_id
+  }
+  if gVar.is_debug: printf(f"调用 ChatGPT API (/reset)：{post_json}")
+  dat = json.dumps(post_json)
+  response = ""
+  try:
+    response = requests.post(config["chatgpt_url"]+"/reset", headers={"Content-Type": "application/json"}, data=dat)
+  except Exception as e:
+    return f"[ChatGTP] 重置失败！错误原因：{e}"
+  if response.status_code == 200:
+    return "[ChatGTP] 已重置会话！"
+  if response.status_code == 412:
+    return "[ChatGTP] 重置失败！您的会话为空！"
+  else:
+    return f"[ChatGTP] 重置失败！错误码：{response.status_code}"
+
+def get_gpt4(text, user_name=None, chat_id="temp"):
+  post_json = {
+    "message": f"({user_name}对你说){text}",
+    "user": str(user_name),
+    "bot_id": str(gVar.self_id),
+    "chat_id": str(chat_id)
+  }
+  if gVar.is_debug: printf(f"调用 GPT4 API (/chat)：{post_json}")
+  dat = json.dumps(post_json)
+  response = ""
+  try:
+    response = requests.post(config["gpt4_url"]+"/chat", headers={"Content-Type": "application/json"}, data=dat).json()
+  except:
+    return "[GPT4] 连接故障！"
+  if "response" not in response:
+    return json.dumps(response)
+  else:
+    response = html.unescape(response["response"])
+    return response
+gVar.func["get_gpt4"] = get_gpt4
+
+def get_gpt4_latest_ask(convo_id):
+  post_json = {
+    "convo_id": convo_id
+  }
+  if gVar.is_debug: printf(f"调用 GPT4 API (/latest)：{post_json}")
+  dat = json.dumps(post_json)
+  response = ""
+  try:
+    response = requests.post(config["gpt4_url"]+"/latest", headers={"Content-Type": "application/json"}, data=dat)
+  except:
+    return ''
+  if response.status_code == 200:
+    response = response.json()
+    return response["response"]
+  else:
+    return ''
+
+def add_gpt4_convo(content, convo_id):
+  post_json = {
+    "content": content,
+    "convo_id": convo_id
+  }
+  if gVar.is_debug: printf(f"调用 GPT4 API (/add)：{post_json}")
+  dat = json.dumps(post_json)
+  response = ""
+  try:
+    response = requests.post(config["gpt4_url"]+"/add", headers={"Content-Type": "application/json"}, data=dat)
+  except:
+    return False
+  if response.status_code == 200:
+    return True
+  else:
+    return False
+
+def reset_gpt4_conv(convo_id):
+  post_json = {
+    "convo_id": convo_id
+  }
+  if gVar.is_debug: printf(f"调用 GPT4 API (/reset)：{post_json}")
+  dat = json.dumps(post_json)
+  response = ""
+  try:
+    response = requests.post(config["gpt4_url"]+"/reset", headers={"Content-Type": "application/json"}, data=dat)
+  except Exception as e:
+    return f"[GTP4] 重置失败！错误原因：{e}"
+  if response.status_code == 200:
+    return "[GTP4] 已重置会话！"
+  if response.status_code == 412:
+    return "[GTP4] 重置失败！您的会话为空！"
+  else:
+    return f"[GTP4] 重置失败！错误码：{response.status_code}"
 
 def get_stable_diffusion(gen_json):
   try:
@@ -252,9 +388,7 @@ def get_edgegpt(text, user_name, chat_id):
     response = requests.post(config["edgegpt_url"]+"/chat", headers={"Content-Type": "application/json"}, data=dat).json()
   except:
     return "[New Bing] 连接故障！"
-  if "response" not in response:
-    return json.dumps(response)
-  else:
+  try:
     msg = html.unescape(response["response"])
     refer = ""
     if "refer" in response:
@@ -268,6 +402,8 @@ def get_edgegpt(text, user_name, chat_id):
       conv_times = response.get("conv_times", "0")
       return f"{msg}\n\n{refer}本会话聊天{conv_times}/{max_conv_times}"
     return msg
+  except:
+    return json.dumps(response)
 
 def reset_edgegpt_conv(chat_id):
   post_json = {

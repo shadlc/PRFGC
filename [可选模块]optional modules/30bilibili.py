@@ -25,7 +25,7 @@ from bilireq.live import get_rooms_info_by_uids
 
 module_name = '哔哩哔哩模块'
 
-bilibi_SESSDATA = '47d903c7%2C1705882930%2C3fd45%2A72-t-nT0guP1m6sG7BCZDA-GoqVjRp_IniUxWNuTqd44fCxl7KSHcVSzOFI_CXhJ_eR-x63wAATgA'
+bilibi_SESSDATA = ''
 data_file = 'data/bilibili_data.json'
 follow_list = import_json(data_file)
 loop = asyncio.get_event_loop()
@@ -818,15 +818,21 @@ def refresh_dynamics(uid):
         continue
       new_dynamics[uid] = []
       dynamic_card = json.loads(dynamic_json.get('card'))
-      title = dynamic_card.get('title') if 'title' in dynamic_card else ''
-      intro = dynamic_card.get('intro') if 'intro' in dynamic_card else ''
-      content = dynamic_card.get('item').get('content') if 'item' in dynamic_card else ''
-      desc = dynamic_card.get('desc') if 'desc' in dynamic_card else ''
+      dynamic_type = '' #dynamic_json.get("desc").get("type")
+      if 'item' in dynamic_card:
+        item_json = dynamic_card.get('item')
+        title = item_json.get('title') if 'title' in item_json else ''
+        intro = item_json.get('content') if 'content' in item_json else ''
+        desc = item_json.get('description') if 'description' in item_json else ''
+      else:
+        title = dynamic_card.get('title') if 'title' in dynamic_card else ''
+        intro = dynamic_card.get('intro') if 'intro' in dynamic_card else ''
+        desc = dynamic_card.get('desc') if 'desc' in dynamic_card else ''
       dynamics.append({
         "dynamic_id": dynamic_json['desc']['dynamic_id'],
         "author": dynamic_json['desc']['user_profile']['info'].get('uname'),
-        "dynamic_type": '',
-        "content": f"{content}{title}\n{intro}{desc}"
+        "dynamic_type": dynamic_type,
+        "content": f"{title}\n{intro}{desc}"
       })
     for dynamic in dynamics:
       new_dynamics[uid].append(dynamic)
@@ -834,7 +840,7 @@ def refresh_dynamics(uid):
       past_dynamics[uid] = new_dynamics[uid].copy()
 
 def get_new_dynamics(uid):
-  dynamics = new_dynamics[uid]
+  dynamics = new_dynamics.get(uid)
   result = []
   if len(dynamics) > 0:
     for i in range(len(dynamics)):
@@ -860,7 +866,7 @@ def get_deleted_dynamic(uid):
 def get_latest_dynamic(uid):
   if uid not in new_dynamics or new_dynamics[uid] == []:
     refresh_dynamics(uid)
-  dynamics = new_dynamics[uid]
+  dynamics = new_dynamics.get(uid)
   if len(dynamics) > 0:
     if len(dynamics) != 1:
       if int(dynamics[0]["dynamic_id"]) < int(dynamics[1]["dynamic_id"]):

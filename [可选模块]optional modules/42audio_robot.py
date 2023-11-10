@@ -1,5 +1,5 @@
 #!/usr/bin/python
-# 音乐机器人模块处理
+#音乐机器人模块处理
 # 本模块是用来调用ts3音乐机器人的[https://github.com/Splamy/TS3AudioBot]
 
 import global_variable as gVar
@@ -50,7 +50,7 @@ class audio_robot:
       elif auth<=2 and re.search(r'^(设置|设定|)音量',self.rev_msg): self.volume()
       elif auth<=2 and re.search(r'^我的歌单',self.rev_msg): self.my_list()
       elif auth<=2 and re.search(r'^(查询|查看)歌单',self.rev_msg): self.show_list()
-      elif auth<=2 and re.search(r'^(新增|增加|设置|重置|清除|清空|删除)歌单',self.rev_msg): self.set_list()
+      elif auth<=2 and re.search(r'^(新增|新建|增加|设置|重置|清除|清空|删除)歌单',self.rev_msg): self.set_list()
       elif auth<=2 and re.search(r'^歌单(新增|增加)',self.rev_msg): self.add_list()
       else: self.success = False
     else: self.success = False
@@ -74,18 +74,21 @@ class audio_robot:
     reply(self.rev, msg)
 
   def play(self):
+    new_connecting = False
     if query_status() != 2:
-      audio_robot_cmd("disconnect")
+      new_connecting = True
+      exe_cmd("disconnect")
       time.sleep(0.5)
-      audio_robot_cmd("connect")
+      exe_cmd("connect")
       time.sleep(0.5)
     if re.search(r'^(当前)?播放$',self.rev_msg):
-      resp = audio_robot_cmd("play")
-      info = json.loads(resp.text)
-      if resp.status_code != 200:
-        msg = f'音乐机器人连接故障！返回值：{resp.status_code}'
-        if info and "ErrorName" in info:
-          msg = f'调用失败！返回值：{resp.status_code}，原因：{info.get("ErrorName","")} {info.get("ErrorMessage","")} {info.get("HelpMessage","")}'
+      if new_connecting:
+        resp = exe_cmd("list_play", "default")
+      else:
+        resp = exe_cmd("play")
+      info = resp.get("result")
+      if resp.get("code") != 200 or resp.get("error"):
+        msg = resp.get("error")
       elif info[1].get("Paused") == True:
         msg = f'已暂停播放！当前曲目：{info[1].get("Link", "未知")}'
       elif info[1].get("Paused") == False:
@@ -93,39 +96,35 @@ class audio_robot:
     elif re.search(r'^播放\s*我的歌单$',self.rev_msg):
       list_name = config["play_list"].get(str(self.user_id))
       if list_name:
-        resp = audio_robot_cmd("list_play", list_name)
-        if resp.status_code == 204:
+        resp = exe_cmd("list_play", list_name)
+        if resp.get("code") == 204:
           msg = f'已播放歌单《{list_name}》！'
         else:
-          info = json.loads(resp.text)
-          msg = f'调用失败！返回值：{resp.status_code}，原因：{info.get("ErrorName","")} {info.get("ErrorMessage","")} {info.get("HelpMessage","")}'
+          msg = resp.get("error")
       else:
         msg = f'你还没有设置自己的歌单~'
     elif re.search(r'^播放\s*(\S+)$',self.rev_msg):
       list_name = re.search(r'^播放\s*(\S+)$',self.rev_msg).groups()[0]
-      resp = audio_robot_cmd("list_play", list_name)
-      if resp.status_code == 204:
+      resp = exe_cmd("list_play", list_name)
+      if resp.get("code") == 204:
         msg = f'已播放歌单《{list_name}》！'
       else:
-        info = json.loads(resp.text)
-        msg = f'调用失败！返回值：{resp.status_code}，原因：{info.get("ErrorName","")} {info.get("ErrorMessage","")} {info.get("HelpMessage","")}'
-        if info.get("ErrorMessage") == "The playlist could not be found.":
-          resp = audio_robot_cmd("get_play_list")
-          info = json.loads(resp.text)
+        msg = resp.get("error")
+        if "The playlist could not be found." in msg:
+          resp = exe_cmd("get_play_list")
+          info = resp.get("result")
           play_list = [i.get("Id") for i in info]
           msg = "未查询到该歌单~\n现存歌单列表：\n- " + ("\n- ").join(play_list)
     reply(self.rev, msg)
 
   def pause(self):
     if query_status() != 2:
-      audio_robot_cmd("connect")
+      exe_cmd("connect")
       time.sleep(0.5)
-    resp = audio_robot_cmd("pause")
-    info = json.loads(resp.text)
-    if resp.status_code != 200:
-      msg = f'音乐机器人连接故障！返回值：{resp.status_code}'
-      if info and "ErrorName" in info:
-        msg = f'调用失败！返回值：{resp.status_code}，原因：{info.get("ErrorName","")} {info.get("ErrorMessage","")} {info.get("HelpMessage","")}'
+    resp = exe_cmd("pause")
+    info = resp.get("result")
+    if resp.get("code") != 200:
+      msg = resp.get("error")
     if info[1].get("Paused") == True:
       msg = f'已暂停播放音乐！'
     elif info[1].get("Paused") == False:
@@ -133,17 +132,13 @@ class audio_robot:
     reply(self.rev, msg)
 
   def random(self):
-    if re.search(r'^(开启|打开|启动)',self.rev_msg):
-      resp = audio_robot_cmd("random", "on")
-    elif re.search(r'^(禁止|取消|关闭)',self.rev_msg):
-      resp = audio_robot_cmd("random", "off")
+    if re.search(r'^(禁止|取消|关闭)',self.rev_msg):
+      resp = exe_cmd("random", "off")
     else:
-      resp = audio_robot_cmd("random")
-    info = json.loads(resp.text)
-    if resp.status_code != 200:
-      msg = f'音乐机器人连接故障！返回值：{resp.status_code}'
-      if info and "ErrorName" in info:
-        msg = f'调用失败！返回值：{resp.status_code}，原因：{info.get("ErrorName","")} {info.get("ErrorMessage","")} {info.get("HelpMessage","")}'
+      resp = exe_cmd("random", "on")
+    info = resp.get("result")
+    if resp.get("code") != 200:
+      msg = resp.get("error")
     elif info[1]:
       msg = f'已开启随机播放！'
     elif not info[1]:
@@ -152,16 +147,14 @@ class audio_robot:
 
   def repeat(self):
     if re.search(r'^(禁止|取消|关闭)循环',self.rev_msg):
-      resp = audio_robot_cmd("repeat", "off")
+      resp = exe_cmd("repeat", "off")
     elif re.search(r'^单曲循环',self.rev_msg):
-      resp = audio_robot_cmd("repeat", "one")
+      resp = exe_cmd("repeat", "one")
     else:
-      resp = audio_robot_cmd("repeat", "all")
-    info = json.loads(resp.text)
-    if resp.status_code != 200:
-      msg = f'音乐机器人连接故障！返回值：{resp.status_code}'
-      if info and "ErrorName" in info:
-        msg = f'调用失败！返回值：{resp.status_code}，原因：{info.get("ErrorName","")} {info.get("ErrorMessage","")} {info.get("HelpMessage","")}'
+      resp = exe_cmd("repeat", "all")
+    info = resp.get("result")
+    if resp.get("code") != 200:
+      msg = resp.get("error")
     elif info[1] == 0:
       msg = f'已关闭循环播放！'
     elif info[1] == 1:
@@ -172,14 +165,12 @@ class audio_robot:
 
   def change(self):
     if re.search(r'(上一首|上一曲)',self.rev_msg):
-      resp = audio_robot_cmd("previous")
+      resp = exe_cmd("previous")
     elif re.search(r'(下一首|下一曲)',self.rev_msg):
-      resp = audio_robot_cmd("next")
-    info = json.loads(resp.text)
-    if resp.status_code != 200:
-      msg = f'音乐机器人连接故障！返回值：{resp.status_code}'
-      if info and "ErrorName" in info:
-        msg = f'调用失败！返回值：{resp.status_code}，原因：{info.get("ErrorName","")} {info.get("ErrorMessage","")} {info.get("HelpMessage","")}'
+      resp = exe_cmd("next")
+    info = resp.get("result")
+    if resp.get("code") != 200:
+      msg = resp.get("error")
     else:
       song_name = info[1].get("Link").rsplit("/", 1)[1]
       msg = f'已切换~当前播放：{song_name}'
@@ -188,12 +179,10 @@ class audio_robot:
   def volume(self):
     if re.search(r'(?:[1-9]\d?|100)',self.rev_msg):
       value = re.search(r'(?:[1-9]\d?|100)',self.rev_msg).group(0)
-      resp = audio_robot_cmd("volume", value)
-      info = json.loads(resp.text)
-      if resp.status_code != 200:
-        msg = f'音乐机器人连接故障！返回值：{resp.status_code}'
-        if info and "ErrorName" in info:
-          msg = f'调用失败！返回值：{resp.status_code}，原因：{info.get("ErrorName","")} {info.get("ErrorMessage","")} {info.get("HelpMessage","")}'
+      resp = exe_cmd("volume", value)
+      info = resp.get("result")
+      if resp.get("code") != 200:
+        msg = resp.get("error")
       else:
         msg = f"已调整音量为{int(info[1])}%"
     else:
@@ -227,13 +216,11 @@ class audio_robot:
           msg = "您的歌单不存在~请使用“ts 我的歌单 [歌单名]”绑定吧~"
           reply(self.rev, msg)
           return
-      resp = audio_robot_cmd("show_play_list", play_list_name)
-      info = json.loads(resp.text)
-      if resp.status_code != 200 and resp.status_code != 422:
-        msg = f'音乐机器人连接故障！返回值：{resp.status_code}'
-        if info and "ErrorName" in info:
-          msg = f'调用失败！返回值：{resp.status_code}，原因：{info.get("ErrorName","")} {info.get("ErrorMessage","")} {info.get("HelpMessage","")}'
-      elif resp.status_code == 422:
+      resp = exe_cmd("show_play_list", play_list_name)
+      info = resp.get("result")
+      if resp.get("code") != 200 and resp.get("code") != 422:
+        msg = resp.get("error")
+      elif resp.get("code") == 422:
         msg = f"该歌单“{play_list_name}”不存在~"
       else:
         song_count = info.get("SongCount", "0")
@@ -242,8 +229,8 @@ class audio_robot:
           content = f'歌单《{play_list_name}》共有{song_count}首音乐'
           msg_list.append({'type': 'node', 'data': {'name': gVar.self_name, 'uin': gVar.self_id, 'content': content}})
           for page in range(song_count // 20 + 1):
-            resp = audio_robot_cmd("show_play_list", play_list_name, f"{page*20}/20")
-            info = json.loads(resp.text)
+            resp = exe_cmd("show_play_list", play_list_name, f"{page*20}/20")
+            info = resp.get("result")
             song_list = info.get("Items", [])
             for i in range(len(song_list)):
               content = f"{page*20+i+1}. " + song_list[i].get("Link")
@@ -257,20 +244,18 @@ class audio_robot:
           msg = f"歌单《{play_list_name}》为空！"
 
     else:
-      resp = audio_robot_cmd("get_play_list")
-      info = json.loads(resp.text)
-      if resp.status_code != 200:
-        msg = f'音乐机器人连接故障！返回值：{resp.status_code}'
-        if info and "ErrorName" in info:
-          msg = f'调用失败！返回值：{resp.status_code}，原因：{info.get("ErrorName","")} {info.get("ErrorMessage","")} {info.get("HelpMessage","")}'
+      resp = exe_cmd("get_play_list")
+      info = resp.get("result")
+      if resp.get("code") != 200:
+        msg = resp.get("error")
       else:
         play_list = [i.get("Id") for i in info]
         msg = "全部歌单列表：\n- " + ("\n- ").join(play_list)
     reply(self.rev, msg)
 
   def set_list(self):
-    if re.search(r'^(新增|增加|设置|重置|清除|清空|删除)歌单\s+(\S+)',self.rev_msg):
-      temp = re.search(r'^(新增|增加|设置|重置|清除|清空|删除)歌单\s+(\S+)\s*(\S*)',self.rev_msg).groups()
+    if re.search(r'^(新增|新建|增加|设置|重置|清除|清空|删除)歌单\s+(\S+)',self.rev_msg):
+      temp = re.search(r'^(新增|新建|增加|设置|重置|清除|清空|删除)歌单\s+(\S+)\s*(\S*)',self.rev_msg).groups()
       play_list_name = temp[1]
       music_dir = temp[2]
       if play_list_name == "我的歌单":
@@ -280,49 +265,44 @@ class audio_robot:
           reply(self.rev, msg)
           return
 
-      resp = audio_robot_cmd("show_play_list", play_list_name)
-      info = json.loads(resp.text)
-      if resp.status_code != 200 and resp.status_code != 422:
-        msg = f'音乐机器人连接故障！返回值：{resp.status_code}'
-        if info and "ErrorName" in info:
-          msg = f'调用失败！返回值：{resp.status_code}，原因：{info.get("ErrorName","")} {info.get("ErrorMessage","")} {info.get("HelpMessage","")}'
+      resp = exe_cmd("show_play_list", play_list_name)
+      info = resp.get("result")
+      if resp.get("code") != 200 and resp.get("code") != 422:
+        msg = resp.get("error")
         reply(self.rev, msg)
         return
-      elif resp.status_code == 422:
+      elif resp.get("code") == 422:
         if re.search(r'(重置|清除|清空|删除)',self.rev_msg):
           msg = "该歌单不存在"
           reply(self.rev, msg)
           return
         else:
-          audio_robot_cmd("create_play_list", play_list_name)
+          exe_cmd("create_play_list", play_list_name)
           time.sleep(0.5)
       else:
         if re.search(r'(重置|清除|清空)',self.rev_msg):
-          resp = audio_robot_cmd("clear_play_list", play_list_name)
-          if resp.status_code == 200:
+          resp = exe_cmd("clear_play_list", play_list_name)
+          if resp.get("code") == 200:
             msg = f"重置歌单《{play_list_name}》成功！"
           else:
-            info = json.loads(resp.text)
-            msg = f'重置失败！原因：{info.get("ErrorName","")} {info.get("ErrorMessage","")} {info.get("HelpMessage","")}'
+            msg = resp.get("error")
           reply(self.rev, msg)
           return
           
         elif re.search(r'删除',self.rev_msg):
-          resp = audio_robot_cmd("delete_play_list", play_list_name)
-          if resp.status_code == 204:
+          resp = exe_cmd("delete_play_list", play_list_name)
+          if resp.get("code") == 204:
             msg = f"删除歌单《{play_list_name}》成功！"
           else:
-            info = json.loads(resp.text)
-            msg = f'删除失败！原因：{info.get("ErrorName","")} {info.get("ErrorMessage","")} {info.get("HelpMessage","")}'
+            msg = resp.get("error")
           reply(self.rev, msg)
           return
         elif re.search(r'(设置|重置)',self.rev_msg):
-          resp = audio_robot_cmd("clear_play_list", play_list_name)
-          if resp.status_code == 200:
+          resp = exe_cmd("clear_play_list", play_list_name)
+          if resp.get("code") == 200:
             pass
           else:
-            info = json.loads(resp.text)
-            msg = f'重置歌单失败！原因：{info.get("ErrorName","")} {info.get("ErrorMessage","")} {info.get("HelpMessage","")}'
+            msg = resp.get("error")
             reply(self.rev, msg)
             return
         else:
@@ -331,25 +311,18 @@ class audio_robot:
           return
 
       if music_dir:
-        resp = audio_robot_cmd("import_play_list", play_list_name, music_dir)
-        info = json.loads(resp.text)
-        if resp.status_code != 200:
-          msg = f'音乐机器人连接故障！返回值：{resp.status_code}'
-          if info and "ErrorName" in info:
-            msg = f'调用失败！返回值：{resp.status_code}，原因：{info.get("ErrorName","")} {info.get("ErrorMessage","")} {info.get("HelpMessage","")}'
+        resp = exe_cmd("import_play_list", play_list_name, music_dir)
+        info = resp.get("result")
+        if resp.get("code") != 200:
+          msg = resp.get("error")
         else:
           msg = f'已为歌单《{play_list_name}》设置歌曲文件夹[{music_dir}]！\n当前歌曲数量为{info.get("SongCount","0")}首\n发送“ts 查询歌单 {play_list_name}”获取歌单歌曲详情'
       else:
-        resp = audio_robot_cmd("show_play_list", play_list_name)
-        info = json.loads(resp.text)
-        if resp.status_code != 200 and resp.status_code != 422:
-          msg = f'音乐机器人连接故障！返回值：{resp.status_code}'
-          if info and "ErrorName" in info:
-            msg = f'调用失败！返回值：{resp.status_code}，原因：{info.get("ErrorName","")} {info.get("ErrorMessage","")} {info.get("HelpMessage","")}'
+        resp = exe_cmd("show_play_list", play_list_name)
+        info = resp.get("result")
+        if resp.get("code") != 200:
+          msg = resp.get("error")
           reply(self.rev, msg)
-          return
-        elif resp.status_code == 422:
-          msg = f"创建歌单《{play_list_name}》失败！"
         else:
           msg = f'创建歌单《{play_list_name}》成功！'
     else:
@@ -357,8 +330,8 @@ class audio_robot:
     reply(self.rev, msg)
 
   def add_list(self):
-    if re.search(r'^歌单(新增|增加)\s+(\S+)\s+(*+)',self.rev_msg):
-      temp = re.search(r'^歌单(新增|增加)\s+(\S+)\s+(*+)',self.rev_msg).groups()
+    if re.search(r'^歌单(新增|增加)\s+(\S+)\s+(.+)',self.rev_msg):
+      temp = re.search(r'^歌单(新增|增加)\s+(\S+)\s+(.+)',self.rev_msg).groups()
       play_list_name = temp[1]
       music_dir = temp[2]
       if play_list_name == "我的歌单":
@@ -368,40 +341,30 @@ class audio_robot:
           reply(self.rev, msg)
           return
 
-      resp = audio_robot_cmd("show_play_list", play_list_name)
-      info = json.loads(resp.text)
-      if resp.status_code != 200 and resp.status_code != 422:
-        msg = f'音乐机器人连接故障！返回值：{resp.status_code}'
-        if info and "ErrorName" in info:
-          msg = f'调用失败！返回值：{resp.status_code}，原因：{info.get("ErrorName","")} {info.get("ErrorMessage","")} {info.get("HelpMessage","")}'
+      resp = exe_cmd("show_play_list", play_list_name)
+      info = resp.get("result")
+      if resp.get("code") != 200 and resp.get("code") != 422:
+        msg = resp.get("error")
         reply(self.rev, msg)
         return
-      elif resp.status_code == 422:
-        audio_robot_cmd("create_play_list", play_list_name)
+      elif resp.get("code") == 422:
+        exe_cmd("create_play_list", play_list_name)
         time.sleep(0.5)
       else:
         pass
 
       if music_dir:
-        resp = audio_robot_cmd("import_play_list", play_list_name, music_dir)
-        info = json.loads(resp.text)
-        if resp.status_code != 200:
-          msg = f'音乐机器人连接故障！返回值：{resp.status_code}'
-          if info and "ErrorName" in info:
-            msg = f'调用失败！返回值：{resp.status_code}，原因：{info.get("ErrorName","")} {info.get("ErrorMessage","")} {info.get("HelpMessage","")}'
+        resp = exe_cmd("import_play_list", play_list_name, music_dir)
+        info = resp.get("result")
+        if resp.get("code") != 200:
+          msg = resp.get("error")
         else:
           msg = f'已为歌单《{play_list_name}》增加歌曲文件夹[{music_dir}]内的全部歌曲！\n当前歌曲数量为{info.get("SongCount","0")}首\n发送“ts 查询歌单 {play_list_name}”获取歌单歌曲详情'
       else:
-        resp = audio_robot_cmd("show_play_list", play_list_name)
-        info = json.loads(resp.text)
-        if resp.status_code != 200 and resp.status_code != 422:
-          msg = f'音乐机器人连接故障！返回值：{resp.status_code}'
-          if info and "ErrorName" in info:
-            msg = f'调用失败！返回值：{resp.status_code}，原因：{info.get("ErrorName","")} {info.get("ErrorMessage","")} {info.get("HelpMessage","")}'
-          reply(self.rev, msg)
-          return
-        elif resp.status_code == 422:
-          msg = f"创建歌单《{play_list_name}》失败！"
+        resp = exe_cmd("show_play_list", play_list_name)
+        info = resp.get("result")
+        if resp.get("code") != 200:
+          msg = resp.get("error")
         else:
           msg = f"创建歌单《{play_list_name}》成功！"
     else:
@@ -409,15 +372,36 @@ class audio_robot:
     reply(self.rev, msg)
 
 def query_status():
-  resp = audio_robot_cmd("list")
-  info = json.loads(resp.text)
+  resp = exe_cmd("list")
+  info = resp.get("result")
   if info and "ErrorName" in info:
     return 2
   elif info:
     return info[0].get("Status")
   return 0
 
-def audio_robot_cmd(cmd_type, data="", data_b=""):
+def exe_cmd(cmd_type, data="", data_b=""):
+  info = ""
+  error = ""
+  try:
+    resp = audio_robot_get(cmd_type, data, data_b)
+  except Exception as e:
+    error = f"网络故障: {e}"
+    return {"code": 0, "result": "", "error": error}
+  if resp.text:
+    try:
+      info = json.loads(resp.text)
+    except ValueError:
+      info = ""
+  else:
+    info = ""
+  if resp.status_code != 200 and "ErrorName" not in info:
+    error = f'音乐机器人连接故障！返回值：{resp.status_code}'
+  if info and "ErrorName" in info:
+    error = f'调用失败！返回值：{resp.status_code}，原因：{info.get("ErrorName","")} {info.get("ErrorMessage","")} {info.get("HelpMessage","")}'
+  return {"code": resp.status_code, "result": info, "error": error}
+
+def audio_robot_get(cmd_type, data="", data_b=""):
   suffix_url = ""
   cmd_list = {
     "list": "/api/bot/list",

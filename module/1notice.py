@@ -1,6 +1,8 @@
 #!/usr/bin/python
 #机器人基础通知处理模块
 
+import random
+
 import global_variable as gVar
 from ifunction import *
 from api_cqhttp import *
@@ -34,14 +36,18 @@ class notice:
     #初始化此模块需要的数据
     if self.group_id:
       self.owner_id = f'g{self.group_id}'
-    else:
+    elif self.user_id:
       self.owner_id = f'u{self.user_id}'
+    else:
+      self.owner_id = f'u{gVar.self_id}'
     self.data = gVar.data[self.owner_id]
     if self.owner_id not in config:
-      config[self.owner_id] = {'recall': True}
+      config[self.owner_id] = {'recall': False}
     self.config = config[self.owner_id]
 
     if auth<=3 and self.notice_type == 'notify' and self.sub_type == 'poke' and self.user_id != gVar.self_id: self.poke()
+    elif auth<=3 and self.notice_type == 'client_status': self.client_status()
+    elif auth<=3 and self.notice_type == 'friend_add': self.friend_add()
     elif auth<=3 and self.notice_type == 'friend_recall': self.friend_recall()
     elif auth<=3 and self.notice_type == 'group_recall': self.group_recall()
     elif auth<=3 and self.notice_type == 'group_upload': self.group_upload()
@@ -49,19 +55,28 @@ class notice:
     elif auth<=3 and self.notice_type == 'group_decrease': self.group_decrease()
     elif auth<=3 and self.notice_type == 'group_increase': self.group_increase()
     elif auth<=3 and self.notice_type == 'group_ban': self.group_ban()
-    elif auth<=3 and self.notice_type == 'friend_add': self.friend_add()
     else: self.success = False
 
   def poke(self):
     if self.group_id:
-      printf(f'{LYELLOW}[NOTICE]在群{LPURPLE}{self.group_name}({self.group_id}){RESET}接收来自{LPURPLE}{self.user_name}({self.user_id}){RESET}的戳一戳')
-      msg = '[CQ:poke,qq=' + str(self.user_id) + ']'
-      reply_id('group', self.group_id, msg)
+      printf(f'{LYELLOW}[NOTICE] {RESET}在群{LPURPLE}{self.group_name}({self.group_id}){RESET}接收来自{LPURPLE}{self.user_name}({self.user_id}){RESET}的戳一戳')
+      if random.choice(range(2)):
+        msg = '[CQ:poke,qq=' + str(self.user_id) + ']'
+        reply_id('group', self.group_id, msg)
     else:
-      printf(f'{LYELLOW}[NOTICE]接收来自{LPURPLE}{self.user_name}({self.user_id}){RESET}的戳一戳')
+      printf(f'{LYELLOW}[NOTICE] 接收来自{LPURPLE}{self.user_name}({self.user_id}){RESET}的戳一戳')
       msg = '[CQ:poke,qq=' + str(self.user_id) + ']'
       reply_id('private', self.user_id, msg)
     printf(f'尝试对{LPURPLE}{self.user_name}({self.user_id}){RESET}进行反戳')
+
+  def client_status(self):
+    if self.rev['online']:
+      printf(f'{LYELLOW}[NOTICE] {RESET}检测到本账号在客户端{LPURPLE}{self.rev["client"]["device_name"]}{RESET}登录')
+    else:
+      printf(f'{LYELLOW}[NOTICE] {RESET}检测到本账号在客户端{LPURPLE}{self.rev["client"]["device_name"]}{RESET}登出')
+
+  def friend_add(self):
+    printf(f'{LYELLOW}[NOTICE] {RESET}{LPURPLE}{self.user_name}({self.user_id}){RESET}已加为好友')
 
   def friend_recall(self):
     msg = QA_get('!!对方撤回')
@@ -87,25 +102,25 @@ class notice:
   def group_upload(self):
     file_name = self.rev['file']['name']
     file_size = calc_size(self.rev['file']['size'])
-    printf(f'{LYELLOW}[NOTICE]{RESET}群{LPURPLE}{self.group_name}({self.group_id}){RESET}内{LPURPLE}{self.user_name}({self.user_id}){RESET}上传了文件{LYELLOW}{file_name}({file_size})')
+    printf(f'{LYELLOW}[NOTICE] {RESET}群{LPURPLE}{self.group_name}({self.group_id}){RESET}内{LPURPLE}{self.user_name}({self.user_id}){RESET}上传了文件{LYELLOW}{file_name}({file_size})')
 
   def group_admin(self):
     if self.sub_type == 'set':
-      printf(f'{LYELLOW}[NOTICE]{RESET}群{LPURPLE}{self.group_name}({self.group_id}){RESET}内{LPURPLE}{self.user_name}({self.user_id}){RESET}被设为管理员')
+      printf(f'{LYELLOW}[NOTICE] {RESET}群{LPURPLE}{self.group_name}({self.group_id}){RESET}内{LPURPLE}{self.user_name}({self.user_id}){RESET}被设为管理员')
     elif self.sub_type == 'unset':
-      printf(f'{LYELLOW}[NOTICE]{RESET}群{LPURPLE}{self.group_name}({self.group_id}){RESET}内管理员{LPURPLE}{self.user_name}({self.user_id}){RESET}被取缔')
+      printf(f'{LYELLOW}[NOTICE] {RESET}群{LPURPLE}{self.group_name}({self.group_id}){RESET}内管理员{LPURPLE}{self.user_name}({self.user_id}){RESET}被取缔')
 
   def group_decrease(self):
     if self.sub_type == 'leave':
-      printf(f'{LYELLOW}[NOTICE]{RESET}{LPURPLE}{self.user_name}({self.user_id}){RESET}主动退群{LPURPLE}{self.group_name}({self.group_id}){RESET}')
+      printf(f'{LYELLOW}[NOTICE] {RESET}{LPURPLE}{self.user_name}({self.user_id}){RESET}主动退群{LPURPLE}{self.group_name}({self.group_id}){RESET}')
     elif self.sub_type == 'kick':
-      printf(f'{LYELLOW}[NOTICE]{RESET}{LPURPLE}{self.user_name}({self.user_id}){RESET}被踢出群{LPURPLE}{self.group_name}({self.group_id}){RESET}')
+      printf(f'{LYELLOW}[NOTICE] {RESET}{LPURPLE}{self.user_name}({self.user_id}){RESET}被踢出群{LPURPLE}{self.group_name}({self.group_id}){RESET}')
 
   def group_increase(self):
     if self.sub_type == 'approve':
-      printf(f'{LYELLOW}[NOTICE]{RESET}{LPURPLE}{self.user_name}({self.user_id}){RESET}已被同意加入群{LPURPLE}{self.group_name}({self.group_id}){RESET}')
+      printf(f'{LYELLOW}[NOTICE] {RESET}{LPURPLE}{self.user_name}({self.user_id}){RESET}已被同意加入群{LPURPLE}{self.group_name}({self.group_id}){RESET}')
     elif self.sub_type == 'invite':
-      printf(f'{LYELLOW}[NOTICE]{RESET}{LPURPLE}{self.user_name}({self.user_id}){RESET}已被邀请加入群{LPURPLE}{self.group_name}({self.group_id}){RESET}')
+      printf(f'{LYELLOW}[NOTICE] {RESET}{LPURPLE}{self.user_name}({self.user_id}){RESET}已被邀请加入群{LPURPLE}{self.group_name}({self.group_id}){RESET}')
     
     printf(str(self.user_id) + "|" + str(gVar.self_id))
     if self.user_id == gVar.self_id:

@@ -36,7 +36,7 @@ class message:
     else:
       self.owner_id = f'u{self.user_id}'
     if self.owner_id not in config:
-      config[self.owner_id] = {'recall': True}
+      config[self.owner_id] = {'recall': False}
     self.config = config[self.owner_id]
 
     #群聊@消息以及私聊消息触发
