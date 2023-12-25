@@ -80,7 +80,6 @@ class chatgpt:
 
   def chatgpt(self):
     if re.search(r'\[CQ:reply,id=(.*)\]', self.rev_msg):
-      printf(f"reply")
       msg_id = re.search(r'\[CQ:reply,id=([^\]]+)\]', self.rev_msg).groups()[0]
       reply_msg_data = get_msg({"message_id": msg_id})['data']
       sender = ''
@@ -90,6 +89,7 @@ class chatgpt:
         sender = reply_msg_data.get('sender')
       latest_msg = get_chatgpt_latest_ask(f"{gVar.self_id}{self.owner_id}")
       if not latest_msg or reply_msg_data and latest_msg not in reply_msg:
+        reply_msg = text_preprocess(reply_msg)
         if sender.get('user_id') == gVar.self_id:
           content = [{"role": "assistant", "content": reply_msg}]
         else:
