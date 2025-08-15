@@ -27,7 +27,7 @@ class Webhook(Module):
     CONFIG = "webhook.json"
     GLOBAL_CONFIG = {
       "host": "127.0.0.1",
-      "port": 3009,
+      "port": 3109,
       "admin_id": "",
       "admin_warning_delay": 3600,
       "notify": {},

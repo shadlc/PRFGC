@@ -25,6 +25,10 @@ class ChatGPT(Module):
     CONV_CONFIG = None
 
     def chatgpt(self):
+        if re.search(r"^重置(会话|对话|聊天)$", self.event.msg):
+            msg = reset_chatgpt_conv(f"{self.robot.self_id}{self.owner_id}")
+            self.reply(self.reply_code() + msg)
+            return
         if re.search(r"\[CQ:reply,id=(.*)\]", self.event.msg):
             msg_id = re.search(r"\[CQ:reply,id=([^\]]+)\]", self.event.msg).groups()[0]
             reply_msg_data = get_msg(self.robot, {"message_id": msg_id})["data"]
@@ -109,7 +113,7 @@ class ChatGPT(Module):
 #         "chat_id": str(chat_id),
 #     }
 #     if is_debug:
-#         info(f"调用 ChatGPT API (/chat)：{post_json}")
+#         printf(f"调用 ChatGPT API (/chat)：{post_json}")
 #     dat = json.dumps(post_json)
 #     response = ""
 #     try:
@@ -140,7 +144,7 @@ class ChatGPT(Module):
 # def get_chatgpt_latest_ask(convo_id):
 #     post_json = {"convo_id": convo_id}
 #     if self.robot.is_debug:
-#         info(f"调用 ChatGPT API (/latest)：{post_json}")
+#         printf(f"调用 ChatGPT API (/latest)：{post_json}")
 #     dat = json.dumps(post_json)
 #     response = ""
 #     try:
@@ -161,7 +165,7 @@ class ChatGPT(Module):
 # def add_chatgpt_convo(content, convo_id):
 #     post_json = {"content": content, "convo_id": convo_id}
 #     if self.robot.is_debug:
-#         info(f"调用 ChatGPT API (/add)：{post_json}")
+#         printf(f"调用 ChatGPT API (/add)：{post_json}")
 #     dat = json.dumps(post_json)
 #     response = ""
 #     try:
@@ -181,7 +185,7 @@ class ChatGPT(Module):
 # def reset_chatgpt_conv(convo_id):
 #     post_json = {"convo_id": convo_id}
 #     if self.robot.is_debug:
-#         info(f"调用 ChatGPT API (/reset)：{post_json}")
+#         printf(f"调用 ChatGPT API (/reset)：{post_json}")
 #     dat = json.dumps(post_json)
 #     response = ""
 #     try:
@@ -222,7 +226,7 @@ class ChatGPT(Module):
 # def temp_chatgpt(text):
 #     post_json = {"message": f"{text}", "bot_id": str(self.robot.self_id)}
 #     if self.robot.is_debug:
-#         info(f"调用 ChatGPT API (/temp_chat)：{post_json}")
+#         printf(f"调用 ChatGPT API (/temp_chat)：{post_json}")
 #     dat = json.dumps(post_json)
 #     try:
 #         response = requests.post(

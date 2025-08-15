@@ -5,7 +5,7 @@ import time
 
 from colorama import Fore
 
-from src.utils import  Module, calc_size, poke, reply_id, via
+from src.utils import Module, calc_size, poke, reply_id, via
 
 
 class Notice(Module):
@@ -29,13 +29,13 @@ class Notice(Module):
                 f"在群{Fore.MAGENTA}{self.event.group_name}({self.event.group_id}){Fore.RESET}接收来自"
                 f"{Fore.MAGENTA}{self.event.user_name}({self.event.user_id}){Fore.RESET}的戳一戳"
             )
-            if random.choice(range(2)):
+            if random.choice(range(5)) == 0:
                 self.printf(
-                    f"50%概率触发，尝试对{Fore.MAGENTA}{self.event.user_name}({self.event.user_id}){Fore.RESET}进行反戳"
+                    f"20%概率触发，尝试对{Fore.MAGENTA}{self.event.user_name}({self.event.user_id}){Fore.RESET}进行反戳"
                 )
                 poke(self.robot, self.event.user_id, self.event.group_id)
-            if self.event.target_id == self.robot.self_id:
-                reply_id(self.robot, "group", self.event.group_id, "%BE_POKED%")
+                if self.event.target_id == self.robot.self_id:
+                    reply_id(self.robot, "group", self.event.group_id, "%BE_POKED%")
         else:
             self.printf(
                 f"{Fore.YELLOW}[{self.ID}] 接收来自"
@@ -103,12 +103,9 @@ class Notice(Module):
                     ):
                         recall_message = message["raw_message"]
                 if recall_message is not None:
-                    msg = f"{self.event.operator_name}在{recall_time}试图将{self.event.user_name}的一条消息“{recall_message}”撤回，%ROBOT_NAME%还记得"
+                    msg = f"%OTHER_RECALL%\n{self.event.operator_name}在{recall_time}试图将{self.event.user_name}的一条消息“{recall_message}”撤回，%ROBOT_NAME%还记得"
                 else:
                     msg = f"{self.event.operator_name}在{recall_time}将{self.event.user_name}的一条消息撤回，但是%ROBOT_NAME%记不得了..."
-                reply_id(self.robot, "group", self.event.group_id, msg)
-            else:
-                msg = "%OTHER_RECALL%"
                 reply_id(self.robot, "group", self.event.group_id, msg)
         print(self.NAME, "else")
 

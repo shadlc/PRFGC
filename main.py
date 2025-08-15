@@ -30,13 +30,13 @@ if platform.system() == "Linux":
     readline.parse_and_bind("tab: complete")
     readline.set_completer(completer)
 
-    # 读取Ctrl C信号
-    def my_handler(signum, frame):
-        robot.warnf("正在关闭程序...")
-        robot.is_running = False
-        sys.exit()
+# 读取Ctrl C信号
+def my_handler(signum, frame):
+    robot.warnf("正在关闭程序...")
+    robot.is_running = False
+    sys.exit()
 
-    signal.signal(signal.SIGINT, my_handler)
+signal.signal(signal.SIGINT, my_handler)
 
 # 启动主函数
 if __name__ == "__main__":
