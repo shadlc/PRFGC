@@ -1,0 +1,330 @@
+"""机器人类定义"""
+
+import importlib
+import json
+import os
+import time
+import threading
+import traceback
+
+from collections import deque
+from colorama import Fore
+
+from src.config import Config
+from src.utils import (
+    Event, Module, handle_placeholder, import_json, msg_img2char, reply_event, simplify_traceback, receive_msg
+)
+from src.command import ExecuteCmd
+
+
+class Memory(object):
+    """独立聊天记录存储"""  
+    def __init__(self):
+        self.past_message = deque(maxlen=20)
+        self.past_notice = deque(maxlen=20)
+
+
+class Concerto:
+    """机器人类定义"""
+
+    def __init__(self):
+        self.is_running = True
+        self.is_restart = True
+
+        self.config_file = "data/config.json"
+        self.config = Config(self.config_file)
+        self.cmd = {}
+
+        self.func = {} # 需要开放为全局函数的字典
+        self.modules = {} # 所有载入模块字典
+        self.func = {} # 需要开放为全局函数的字典
+        self.placeholder_dict = import_json(
+            os.path.join(self.config.data_path, self.config.lang_file)
+        ).get("placeholder", {})
+
+        self.api_name = ""
+        self.self_id = ""
+        self.self_name = ""
+        self.at_info = ""
+        self.request_list = deque(maxlen=20)
+        self.self_message = deque(maxlen=20)
+        self.user_dict = {}
+        self.group_dict = {}
+        self.data: {Memory} = {}
+        self.past_message = deque(maxlen=20)
+        self.past_notice = deque(maxlen=20)
+        self.past_request = deque(maxlen=20)
+        self.latest_data = {}
+
+        self.start_info = """
+    __                           __        
+   /  )                  _/_    /  )    _/_
+  /   __ ____  _. _  __  /  __ /--<  __ /  
+ (__/(_)/ / <_(__</_/ (_<__(_)/___/_(_)<__ 
+        """
+
+    def listening_console(self):
+        """监听来自终端的输入并处理"""
+        while self.is_running:
+            self.handle_console(input(f"\r{Fore.GREEN}<console>{Fore.RESET}"))
+
+    def listening_msg(self):
+        """监听来自qq的请求"""
+        self.printf(f"正在监听: {Fore.GREEN}{self.config.host}:{self.config.port}{Fore.RESET}")
+        while self.is_running:
+            self.handle_msg(receive_msg(self))
+
+    def handle_msg(self, rev):
+        """消息处理接口主函数"""
+
+        if rev == {}:
+            return
+
+        event = Event(self, rev)
+        user_id = event.user_id
+        group_id = event.group_id
+
+        # 如果是调试模式，输出所有接收到的原始信息
+        if self.config.is_debug and not event.post_type == "meta_event":
+            self.printf(
+                f"{Fore.YELLOW}[DATA]{Fore.RESET} 接收数据包 "
+                f"{Fore.YELLOW}{json.dumps(rev, ensure_ascii=False)}{Fore.RESET}"
+            )
+
+        # 数据存储到对应的data中, 并获取data
+        if user_id == self.self_id or user_id in self.config.blacklist:
+            pass
+        elif group_id:
+            if ("g" + str(group_id)) not in self.data:
+                self.data["g" + str(group_id)] = Memory()
+            data = self.data["g" + str(group_id)]
+            self.latest_data = "g" + str(group_id)
+        elif user_id:
+            if ("u" + str(user_id)) not in self.data:
+                self.data["u" + str(user_id)] = Memory()
+            data = self.data["u" + str(user_id)]
+            self.latest_data = "u" + str(user_id)
+        else:
+            if ("u" + str(self.self_id)) not in self.data:
+                self.data["u" + str(self.self_id)] = Memory()
+            data = self.data["u" + str(self.self_id)]
+
+        # 分类处理消息，不处理自身与黑名单用户
+        if user_id == self.self_id or user_id in self.config.blacklist:
+            pass
+        elif event.post_type == "message":
+            data.past_message.append(rev)
+            if str(user_id) in self.config.admin_list:
+                return self.message(event, 1)
+            elif group_id:
+                if group_id in self.config.rev_group:
+                    return self.message(event, 2)
+                else:
+                    return self.message(event)
+            else:
+                if event.sub_type == "friend":
+                    return self.message(event, 2)
+                else:
+                    return self.message(event)
+        elif event.post_type == "message_sent":
+            if event.msg_type == "group":
+                data.past_message.append(rev)
+            return self.message_sent(event)
+        elif event.post_type == "notice":
+            data.past_notice.append(rev)
+            return self.notice(event)
+        elif event.post_type == "request":
+            self.past_request.append(rev)
+            return self.request(event)
+        elif event.post_type == "meta_event":
+            return self.event(event)
+
+
+    def handle_console(self, rev):
+        """终端命令处理"""
+        return ExecuteCmd(rev, self)
+
+    def message(self, event: Event, auth=3):
+        """处理消息事件
+
+        Args:
+            event (Event): 事件数据
+            auth (int, optional): 权限等级
+        """
+        if not event.group_id:
+            self.printf(
+                f"{Fore.CYAN}[RECEIVE] {Fore.RESET}"
+                f"{Fore.MAGENTA}{event.user_name}({event.user_id}){Fore.RESET}: {event.msg}"
+            )
+        elif event.group_id:
+            if self.at_info in event.msg:
+                self.printf(
+                    f"{Fore.CYAN}[RECEIVE] {Fore.RESET}群"
+                    f"{Fore.MAGENTA}{event.group_name}({event.group_id}){Fore.RESET}内"
+                    f"{Fore.MAGENTA}{event.user_name}({event.user_id}){Fore.RESET}: {event.msg}"
+                )
+            elif self.config.is_show_all_msg:
+                self.printf(
+                    f"{Fore.CYAN}[RECEIVE] {Fore.RESET}群"
+                    f"{Fore.MAGENTA}{event.group_name}({event.group_id}){Fore.RESET}内"
+                    f"{Fore.MAGENTA}{event.user_name}({event.user_id}){Fore.RESET}: {event.msg}"
+                )
+
+        def execute_msg(event: Event, auth):
+            try:
+                for mod in self.modules.values():
+                    if mod(event, auth).success:
+                        break
+            except Exception:
+                if self.config.is_debug:
+                    reply_event(self, event, f"%FATAL_ERROR%\n{traceback.format_exc()}")
+                else:
+                    reply_event(self, event, f"%FATAL_ERROR%{simplify_traceback(traceback.format_exc())}")
+
+        threading.Thread(target=execute_msg, args=[event, auth], daemon=True).start()
+
+    def message_sent(self, event: Event):
+        """处理发送消息事件
+
+        Args:
+            event (Event): 事件数据
+        """
+        if self.config.is_show_all_msg:
+            self.printf(
+                f"{Fore.BLUE}[SENT]{Fore.RESET}发送 -> "
+                f"{Fore.MAGENTA}{event.target_name}({event.target_id}){Fore.RESET} "
+                f"{Fore.MAGENTA}(msg_id:{event.msg_id}){Fore.RESET} "
+                f"{event.msg}"
+            )
+
+    def notice(self, event: Event, auth=3):
+        """处理通知事件
+
+        Args:
+            event (Event): 事件数据
+            auth (int, optional): 权限等级
+        """
+
+        def execute_notice(event, auth):
+            try:
+                if self.modules.get("Notice"):
+                    self.modules["Notice"](event, auth)
+            except Exception:
+                if self.config.is_debug:
+                    reply_event(self, event, f"%FATAL_ERROR%{traceback.format_exc()}")
+                else:
+                    reply_event(self, event, f"%FATAL_ERROR%{simplify_traceback(traceback.format_exc())}")
+        threading.Thread(target=execute_notice, args=[event, auth], daemon=True).start()
+
+    def request(self, event: Event):
+        """处理请求事件
+
+        Args:
+            event (Event): 事件数据
+            auth (int, optional): 权限等级
+        """
+        request_type = event.raw.get("request_type")
+        comment = event.raw.get("comment")
+        if request_type == "friend":
+            self.printf(
+                f"{Fore.YELLOW}[NOTICE]{Fore.RESET}{Fore.MAGENTA}{event.user_name}({event.user_id}){Fore.RESET}发送好友请求"
+                f"{Fore.MAGENTA}{comment}{Fore.RESET}，使用 {Fore.CYAN}add agree/deny 备注{Fore.RESET} 同意或拒绝此请求"
+            )
+        elif request_type == "group":
+            self.printf(
+                f"{Fore.YELLOW}[NOTICE]{Fore.RESET}{Fore.MAGENTA}{event.user_name}({event.user_id}){Fore.RESET}发送加群请求"
+                f"{Fore.MAGENTA}{comment}{Fore.RESET}，使用 {Fore.CYAN}add agree/deny 理由{Fore.RESET} 同意或拒绝此请求"
+            )
+
+    def event(self, event: Event):
+        """处理元事件
+
+        Args:
+            event (Event): 事件数据
+            auth (int, optional): 权限等级
+        """
+        if self.config.is_show_heartbeat:
+            received = event.raw["status"]["stat"]["PacketReceived"]
+            self.printf(
+                f"{Fore.YELLOW}[NOTICE]{Fore.RESET}接收到API的第{Fore.MAGENTA}{received}{Fore.RESET}个心跳包"
+            )
+
+    def import_modules(self):
+        """导入modules内的模块"""
+        def import_classes(folder_path):
+            for item in sorted(os.listdir(folder_path)):
+                item_path = os.path.join(folder_path, item)
+                if item.endswith(".py"):
+                    module_name = os.path.splitext(item)[0]
+                    spec = importlib.util.spec_from_file_location(module_name, item_path)
+                    module = importlib.util.module_from_spec(spec)
+                    spec.loader.exec_module(module)
+                    is_module = False
+                    for name, obj in vars(module).items():
+                        if isinstance(obj, type) and hasattr(obj, "ID") and obj.ID and hasattr(obj, "NAME") and obj.NAME:
+                            is_module = True
+                            self.module_enable(obj, item)
+                            if hasattr(obj, "AUTO_INIT") and obj.AUTO_INIT:
+                                obj(Event(self))
+                    if not is_module:
+                        self.errorf(f"文件[{item}]内没有有效的模块, 加载此模块失败!")
+        import_classes("modules")
+
+    def module_enable(self, module: Module, module_file: str):
+        """
+        启用组件
+        :param module: 组件方法
+        :param module_file: 组件文件名
+        """
+        if module.ID in self.modules:
+            self.errorf(
+                f"载入失败！重名模块 {Fore.YELLOW}[{module.ID}] {module.NAME}({module_file}){Fore.RESET}"
+            )
+        else:
+            self.modules[module.ID] = module
+            self.printf(f"{Fore.YELLOW}[{module.ID}] {Fore.RESET}{module.NAME}({module_file})已接入！")
+
+    def printf(self, msg, end="\n", console=True, flush=False):
+        """
+        向控制台输出通知级别的消息
+        :param msg: 信息
+        :param end: 末尾字符
+        :param console: 是否增加一行<console>
+        """
+        msg = handle_placeholder(str(msg), self.placeholder_dict)
+        prefix = "\r[" + time.strftime("%H:%M:%S", time.localtime()) + " INFO] "
+        if self.config.is_show_image:
+            msg = msg_img2char(self.config, msg)
+        if flush:
+            print(msg, end=end,flush=flush)
+        else:
+            print(f"{prefix}{msg}", end=end, flush=flush)
+        if console:
+            print(f"\r{Fore.GREEN}<console>{Fore.RESET} ", end="")
+
+    def warnf(self, msg, end="\n", console=True):
+        """
+        向控制台输出警告级别的消息
+        :param msg: 信息
+        :param end: 末尾字符
+        :param console: 是否增加一行<console>
+        """
+        msg = handle_placeholder(str(msg), self.placeholder_dict)
+        msg = msg.replace(Fore.RESET, Fore.YELLOW)
+        prefix = "\r[" + time.strftime("%H:%M:%S", time.localtime()) + " WARN] "
+        print(f"{Fore.YELLOW}{prefix}{msg}{Fore.RESET}", end=end)
+        if console:
+            print(f"\r{Fore.GREEN}<console>{Fore.RESET} ", end="")
+
+    def errorf(self, msg, end="\n", console=True):
+        """
+        向控制台输出错误级别的消息
+        :param msg: 信息
+        :param end: 末尾字符
+        :param console: 是否增加一行<console>
+        """
+        msg = handle_placeholder(str(msg), self.placeholder_dict)
+        prefix = "\r[" + time.strftime("%H:%M:%S", time.localtime()) + " ERROR] "
+        print(f"{Fore.RED}{prefix}{msg}{Fore.RESET}", end=end)
+        if console:
+            print(f"\r{Fore.GREEN}<console>{Fore.RESET} ", end="")

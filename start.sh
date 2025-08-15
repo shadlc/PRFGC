@@ -1,15 +1,14 @@
 #!/bin/bash
 #Linux平台启动入口
 
-clear
-stty echo
+# clear
 
 is_restart=1
 
 while (($is_restart))
 do
- python robot.py
+ stty echo
+ poetry run python main.py
  is_restart=$?
 done
-
 stty echo

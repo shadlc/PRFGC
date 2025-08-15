@@ -1,0 +1,21 @@
+[tool.poetry]
+name = "ConcertBot"
+version = "0.1.0"
+description = "A python HTTP interactive robot that complies with the OneBot protocol"
+authors = ["shadlc <i@shadlc.net>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.12"
+pillow = "^11.2.1"
+colorama = "^0.4.6"
+requests = "^2.32.3"
+
+[[tool.poetry.source]]
+name = "ali"
+priority = "primary"
+url = "https://mirrors.aliyun.com/pypi/simple/"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

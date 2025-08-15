@@ -1,3 +1,3 @@
 :startbot
-python robot.py
+python main.py
 if errorlevel 1 goto startbot
