@@ -2,7 +2,9 @@
 
 import importlib
 import json
+import logging
 import os
+import re
 import time
 import threading
 import traceback
@@ -16,6 +18,7 @@ from src.utils import (
 )
 from src.command import ExecuteCmd
 
+logger = logging.getLogger()
 
 class Memory(object):
     """独立聊天记录存储"""  
@@ -29,7 +32,7 @@ class Concerto:
 
     def __init__(self):
         self.is_running = True
-        self.is_restart = True
+        self.is_restart = False
 
         self.config_file = "data/config.json"
         self.config = Config(self.config_file)
@@ -66,7 +69,7 @@ class Concerto:
     def listening_console(self):
         """监听来自终端的输入并处理"""
         while self.is_running:
-            self.handle_console(input(f"\r{Fore.GREEN}<console>{Fore.RESET}"))
+            self.handle_console(input(f"\r{Fore.GREEN}<console> {Fore.RESET}"))
 
     def listening_msg(self):
         """监听来自qq的请求"""
@@ -77,7 +80,7 @@ class Concerto:
     def handle_msg(self, rev):
         """消息处理接口主函数"""
 
-        if rev == {}:
+        if not rev or rev == {}:
             return
 
         event = Event(self, rev)
@@ -142,6 +145,8 @@ class Concerto:
 
     def handle_console(self, rev):
         """终端命令处理"""
+        if rev:
+            logger.info("%s", f"<console> {rev}")
         return ExecuteCmd(rev, self)
 
     def message(self, event: Event, auth=3):
@@ -300,7 +305,8 @@ class Concerto:
         else:
             print(f"{prefix}{msg}", end=end, flush=flush)
         if console:
-            print(f"\r{Fore.GREEN}<console>{Fore.RESET} ", end="")
+            print(f"\r{Fore.GREEN}<console> {Fore.RESET} ", end="")
+        logger.info("%s", re.sub(r"\x1B\[[0-?]*[ -/]*[@-~]", "", f"{prefix}{msg}").strip())
 
     def warnf(self, msg, end="\n", console=True):
         """
@@ -312,9 +318,11 @@ class Concerto:
         msg = handle_placeholder(str(msg), self.placeholder_dict)
         msg = msg.replace(Fore.RESET, Fore.YELLOW)
         prefix = "\r[" + time.strftime("%H:%M:%S", time.localtime()) + " WARN] "
-        print(f"{Fore.YELLOW}{prefix}{msg}{Fore.RESET}", end=end)
+        msg = f"{Fore.YELLOW}{prefix}{msg}{Fore.RESET}"
+        print(msg, end=end)
+        logger.info("%s", re.sub(r"\x1B\[[0-?]*[ -/]*[@-~]", "", msg).strip())
         if console:
-            print(f"\r{Fore.GREEN}<console>{Fore.RESET} ", end="")
+            print(f"\r{Fore.GREEN}<console> {Fore.RESET} ", end="")
 
     def errorf(self, msg, end="\n", console=True):
         """
@@ -325,6 +333,8 @@ class Concerto:
         """
         msg = handle_placeholder(str(msg), self.placeholder_dict)
         prefix = "\r[" + time.strftime("%H:%M:%S", time.localtime()) + " ERROR] "
-        print(f"{Fore.RED}{prefix}{msg}{Fore.RESET}", end=end)
+        msg = f"{Fore.RED}{prefix}{msg}{Fore.RESET}"
+        print(msg, end=end)
+        logger.info("%s", re.sub(r"\x1B\[[0-?]*[ -/]*[@-~]", "", msg).strip())
         if console:
-            print(f"\r{Fore.GREEN}<console>{Fore.RESET} ", end="")
+            print(f"\r{Fore.GREEN}<console> {Fore.RESET} ", end="")

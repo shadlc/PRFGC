@@ -617,7 +617,7 @@ class ExecuteCmd(object):
 
     def request(self, argv=""):
         if re.search(r"(get|GET)\s+(.+)", argv):
-            url = re.search(r"(.+)", argv).groups()[0]
+            url = re.search(r"\s+(.+)", argv).groups()[0]
             result = get(self.robot, url)
             if status_ok(result):
                 self.printf(f"GET请求发送成功，返回为{Fore.YELLOW}{result}{Fore.RESET}")
@@ -625,8 +625,8 @@ class ExecuteCmd(object):
                 self.warnf(f"GET发送请求出错，返回为{Fore.YELLOW}{result}{Fore.RESET}")
         elif re.search(r"(post|POST)\s+(\S+)\s+(.+)", argv):
             temp = re.search(r"(post|POST)\s+(\S+)\s+(.+)", argv).groups()[1:]
-            url = temp[0]
-            data = temp[1]
+            url = temp[1]
+            data = temp[2]
             result = post(self.robot, url, json.loads(data))
             if status_ok(result):
                 self.printf(f"POST请求发送成功，返回为{Fore.YELLOW}{result}{Fore.RESET}")
@@ -634,7 +634,8 @@ class ExecuteCmd(object):
                 self.warnf(f"POST发送请求出错，返回为{Fore.YELLOW}{result}{Fore.RESET}")
         else:
             self.printf(
-                f"请使用 {Fore.CYAN}request [GET/POST] 请求API (POST请求体){Fore.RESET} 向API发送请求(参考https://napneko.github.io/develop/api/doc)"
+                f"请使用 {Fore.CYAN}request [GET/POST] 请求API (POST请求体){Fore.RESET} "
+                +"向API发送请求(参考https://napneko.github.io/develop/api/doc)"
             )
 
     def say(self, argv=""):
@@ -772,11 +773,11 @@ class ExecuteCmd(object):
             else:
                 self.warnf("图片字符画显示已关闭")
         else:
-            self.printf(f"==========设置列表==========")
+            self.printf("==========设置列表==========")
             self.printf(f"{Fore.CYAN}set self QQ号/auto{Fore.RESET} 设置机器人QQ号(用于辨别@信息)")
             self.printf(f"{Fore.CYAN}set show all/brief{Fore.RESET} 设置显示信息类别")
             self.printf(f"{Fore.CYAN}set image (true/false){Fore.RESET} 设置图片字符画显示")
-            self.printf(f"{Fore.CYAN}set image color (true/false){Fore.RESET} 设置彩色图片显示")
+            self.printf(f"{Fore.CYAN}set image color {Fore.RESET} 设置彩色图片显示")
             self.printf(f"{Fore.CYAN}set image minsize/maxsize 数字{Fore.RESET} 设置图片字符画最小/最大宽度")
             self.printf(f"{Fore.CYAN}set image size 数字 数字{Fore.RESET} 设置图片字符画最小/最大宽度")
             self.printf(f"{Fore.CYAN}set heartbeat (true/false){Fore.RESET} 设置心跳包是否接收")
@@ -801,7 +802,7 @@ class ExecuteCmd(object):
             self.printf(f"请使用 {Fore.CYAN}sign 群聊ID{Fore.RESET} 进行群签到")
 
     def stop(self, argv=""):
-        self.printf(f"正在关闭程序...")
+        self.printf("正在关闭程序...")
         self.robot.is_running = False
         self.robot.is_restart = False
 
@@ -810,6 +811,8 @@ class ExecuteCmd(object):
             raise RuntimeError("手动触发了一个运行时错误")
         else:
             thing = re.search(r"(.*)", argv).groups()[0]
+            if not thing:
+                thing = "测试"
             msg = f"{thing} OK!"
         self.printf(msg)
 

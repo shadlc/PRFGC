@@ -26,6 +26,12 @@ def get(robot: "Concerto", url):
         if robot.config.is_debug:
             robot.printf(f"{Fore.YELLOW}[DATA]{Fore.RESET} GET请求{Fore.MAGENTA}[{get_url}]{Fore.RESET}后返回{Fore.YELLOW}{r.json()}{Fore.RESET}")
         return rev_json
+    except json.JSONDecodeError:
+        robot.errorf("数据解析错误！")
+        return {}
+    except requests.exceptions.InvalidURL:
+        robot.errorf("无效的请求地址！")
+        return {}
     except Exception as e:
         raise e
 
@@ -53,7 +59,10 @@ def connect_api(robot: "Concerto"):
     connected = False
     while not connected:
         print(".", end="", flush=True)
-        result = get(robot, "/get_version_info")
+        try:
+            result = get(robot, "/get_version_info")
+        except requests.exceptions.ConnectionError:
+            continue
         connected = True if status_ok(result) else False
         app_name = result.get("data",{}).get("app_name")
         app_version = result.get("data",{}).get("app_version")
@@ -224,4 +233,9 @@ def set_group_sign(robot: "Concerto", resp_dict):
 def set_group_special_title(robot: "Concerto", resp_dict):
     """设置群成员专属头衔"""
     url = "/set_group_special_title"
+    return post(robot, url, resp_dict)
+
+def get_group_member_info(robot: "Concerto", resp_dict):
+    """获取群成员信息"""
+    url = "/get_group_member_info"
     return post(robot, url, resp_dict)

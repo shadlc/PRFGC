@@ -32,6 +32,7 @@ class Webhook(Module):
       "admin_warning_delay": 3600,
       "notify": {},
     }
+    CONV_CONFIG = None
     AUTO_INIT = True
     def __init__(self, event, auth=0):
         super().__init__(event, auth)
@@ -48,6 +49,10 @@ class Webhook(Module):
         while True:
             try:
                 data = self.receive_msg()
+            except Exception:
+                self.errorf(f"加载失败, 模块已停止运行!")
+                return
+            try:
                 threading.Thread(target=self.handle_msg, args=(data,), daemon=True).start()
                 time.sleep(0.01)
             except Exception:
@@ -77,10 +82,14 @@ class Webhook(Module):
             else:
                 rev_json = json.loads(body)
                 return rev_json
-        except socket.gaierror:
-            self.errorf(f"绑定地址有误！ {self.config["host"]}:{self.config["port"]} 不是一个正确的可绑定地址")
-        except json.JSONDecodeError:
-            self.warnf("JSON数据解析失败！")
+        except OSError as e:
+            self.errorf(f"端口{self.config["port"]}已被占用 {e}")
+            raise e
+        except socket.gaierror as e:
+            self.errorf(f"绑定地址有误！ {self.config["host"]} 不是一个正确的可绑定地址 {e}")
+            raise e
+        except json.JSONDecodeError as e:
+            self.warnf(f"JSON数据解析失败！ {e}")
             return {}
 
     def handle_msg(self, data: dict):

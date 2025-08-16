@@ -1,13 +1,16 @@
 #!/usr/bin/python
 # 机器人启动入口，由外部方法调用最佳
 
+import os
 import threading
 import platform
+import logging
 import random
 import signal
 import time
 import sys
 
+from logging.handlers import TimedRotatingFileHandler
 from colorama import Fore
 
 from src.api import connect_api
@@ -38,10 +41,25 @@ def my_handler(signum, frame):
 
 signal.signal(signal.SIGINT, my_handler)
 
+# 日志记录
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
+
+os.makedirs(robot.config.log_path, exist_ok=True)
+handler = TimedRotatingFileHandler(
+    os.path.join(robot.config.log_path, "bot.log"),
+    when="midnight",
+    interval=1,
+    encoding="utf-8"
+)
+formatter = logging.Formatter("%(message)s")
+handler.setFormatter(formatter)
+logger.addHandler(handler)
+
 # 启动主函数
 if __name__ == "__main__":
     robot.printf(random.choice([Fore.BLACK,Fore.RED,Fore.GREEN,Fore.YELLOW,Fore.BLUE,Fore.MAGENTA,Fore.CYAN,Fore.WHITE]) + robot.start_info + Fore.RESET, flush=True)
-    robot.printf("ConcertoBot启动中，正在连接API...", end="", console=False)
+    robot.printf(f"正在连接[{robot.config.api_base}]API...", end="", console=False)
     connect_api(robot)
     robot.printf(f"已接入账号: {Fore.MAGENTA}{robot.self_name}({robot.self_id}){Fore.RESET}")
     robot.import_modules()
@@ -50,7 +68,4 @@ if __name__ == "__main__":
 
     while robot.is_running:
         time.sleep(0.1)
-    if robot.is_restart:
-        sys.exit(1)
-    else:
-        sys.exit(0)
+    sys.exit(robot.is_restart)

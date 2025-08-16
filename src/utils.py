@@ -18,7 +18,7 @@ from colorama import Fore
 
 from src.config import Config
 from src.api import (
-    friend_poke, get_forward_msg, get_group_info, get_image, get_msg,
+    friend_poke, get_forward_msg, get_group_info, get_group_member_info, get_image, get_msg,
     get_stranger_info, group_poke, handle_quick_operation, post,
     send_msg, set_msg_emoji_like, set_group_sign, set_group_special_title
 )
@@ -58,16 +58,20 @@ def receive_msg(robot: "Concerto"):
             robot.warnf(f"收到一非JSON数据\n{body}")
             return {}
         elif header.get("Transfer-Encoding") == "chunked":
-            body = body.split("\r\n", maxsplit=1)[1].strip()
+            body = body.split("\r\n")[1].strip()
             rev_json = json.loads(body)
             return rev_json
         else:
             rev_json = json.loads(body)
             return rev_json
-    except socket.gaierror:
-        robot.errorf(f"绑定地址有误！ {robot.config.host} 不是一个正确的可绑定地址")
-    except json.JSONDecodeError:
-        robot.warnf("JSON数据解析失败！")
+    except OSError as e:
+        robot.errorf(f"端口{robot.config.port}已被占用，程序终止！ {e}")
+        robot.is_running = False
+    except socket.gaierror as e:
+        robot.errorf(f"绑定地址有误！ {robot.config.host} 不是一个正确的可绑定地址，程序终止！ {e}")
+        robot.is_running = False
+    except json.JSONDecodeError as e:
+        robot.warnf(f"JSON数据解析失败！ {e}")
         return {}
 
 def import_json(file):
@@ -257,7 +261,7 @@ def build_node(*args, **kwargs):
             "type": "node",
             "data": {
                 "user_id": kwargs.get("user_id", "0"),
-                "nickname": kwargs.get("nickname", "ConcertoBot"),
+                "nickname": kwargs.get("nickname", ""),
                 "content": content
             }
         }
@@ -534,7 +538,17 @@ def group_sign(robot: "Concerto", group_id: str):
     resp_dict = {"group_id": group_id}
     return set_group_sign(robot, resp_dict)
 
-def group_label(robot: "Concerto", group_id: str, user_id: str, special_title: str):
+def group_member_info(robot: "Concerto", group_id: str, user_id: str):
+    """
+    获取群成员信息
+    :param robot: 机器人类
+    :param group_id: 群ID
+    :param user_id: 用户ID
+    """
+    resp_dict = {"group_id": group_id, "user_id": user_id}
+    return get_group_member_info(robot, resp_dict)
+
+def group_special_title(robot: "Concerto", group_id: str, user_id: str, special_title: str):
     """
     群称号
     :param robot: 机器人类
@@ -745,7 +759,7 @@ class Module:
         :param end: 末尾字符
         :param console: 是否增加一行<console>
         """
-        self.robot.warnf(f"{Fore.YELLOW}[{self.ID}]{Fore.RESET} {msg}", end=end, console=console)
+        self.robot.warnf(f"{Fore.YELLOW}[{self.ID}]{Fore.YELLOW} {msg}", end=end, console=console)
 
     def errorf(self, msg, end="\n", console=True):
         """
@@ -754,4 +768,4 @@ class Module:
         :param end: 末尾字符
         :param console: 是否增加一行<console>
         """
-        self.robot.errorf(f"{Fore.YELLOW}[{self.ID}]{Fore.RESET} {msg}", end=end, console=console)
+        self.robot.errorf(f"{Fore.YELLOW}[{self.ID}]{Fore.RED} {msg}", end=end, console=console)
