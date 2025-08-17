@@ -1,5 +1,7 @@
 """函数库"""
 
+import ast
+import importlib
 import io
 import os
 import re
@@ -74,7 +76,7 @@ def receive_msg(robot: "Concerto"):
         robot.warnf(f"JSON数据解析失败！ {e}")
         return {}
 
-def import_json(file):
+def import_json(file: str):
     """导入json"""
     try:
         content = "{}"
@@ -87,13 +89,13 @@ def import_json(file):
         print(f"对文件 {file} 解析发生错误！")
         raise e
 
-def save_json(file_name, data):
+def save_json(file_name: str, data: str):
     """导出json"""
     json.dump(
         data, open(file_name, "w", encoding="utf-8"), indent=2, ensure_ascii=False
     )
 
-def calc_size(byte):
+def calc_size(byte: int):
     """
     格式化文件大小
     :param byte: 字节数
@@ -110,7 +112,7 @@ def calc_size(byte):
     return ".%sB" % byte
 
 
-def char_colorama(char, rgb):
+def char_colorama(char: str, rgb: list):
     """
     为字符添加标准8色
     :param char: 字符
@@ -147,7 +149,7 @@ def char_colorama(char, rgb):
             color = Fore.BLUE
     return color + char + Fore.RESET
 
-def char_ansi_256(char, rgb):
+def char_ansi_256(char: str, rgb: list):
     """
     使用 ANSI 256 色 输出字符
     :param char: 字符
@@ -161,7 +163,7 @@ def char_ansi_256(char, rgb):
     color_code = 16 + 36 * r_ + 6 * g_ + b_
     return f"\033[38;5;{color_code}m{char}\033[0m"
 
-def char_true_color(char, rgb):
+def char_true_color(char: str, rgb: list):
     """
     使用 TrueColor 输出字符
     :param char: 字符
@@ -171,16 +173,16 @@ def char_true_color(char, rgb):
     r, g, b = rgb
     return f"\033[38;2;{r};{g};{b}m{char}\033[0m"
 
-def msg_img2char(config: Config, msg):
+def msg_img2char(config: Config, msg: str):
     """
     检测CQ码中有图片并转化为字符画
     :param msg: 收到的消息
     :param color: 是否渲染颜色
     :return: 转化为字符画的消息
     """
-    while re.search(r"\[CQ:image.*url=(.*)\]", msg) and "[RECEIVE]" in msg:
+    while re.search(r"\[CQ:image.*?url=(.*?)\]", msg) and "[RECEIVE]" in msg:
         try:
-            url = re.search(r"\[CQ:image.*url=(.*)\]", msg).groups()[0]
+            url = re.search(r"\[CQ:image.*?url=(.*?)\]", msg).groups()[0]
             img = Image.open(io.BytesIO(
                 requests.get(url, timeout=3).content    
             )).convert("RGB")
@@ -213,14 +215,14 @@ def msg_img2char(config: Config, msg):
                     row = 0
                     char += "\n"
             msg = msg.replace(
-                re.search(r"(\[CQ:image.*url=(.*)\])", msg).groups()[0], "\n" + char
+                re.search(r"(\[CQ:image.*?url=(.*?)\])", msg).groups()[0], "\n" + char
             )
         except Exception:
             # 不应影响显示
             return msg
     return msg
 
-def status_ok(response):
+def status_ok(response: dict):
     """
     检测API接口是否返回正常
     :param respond: API返回的json信息
@@ -231,7 +233,7 @@ def status_ok(response):
     else:
         return False
 
-def handle_placeholder(text, placeholder_dict):
+def handle_placeholder(text: str, placeholder_dict: dict):
     """替换标记的字符串"""
     pattern = re.compile(r"(%\S+?%)")
     flags = pattern.findall(str(text))
@@ -278,7 +280,7 @@ def build_forward(text: str, user_id: str):
         }
     return data
 
-def reply_event(robot: "Concerto", event: "Event", msg, reply=False, force=False):
+def reply_event(robot: "Concerto", event: "Event", msg: str, reply=False, force=False):
     """
     快捷回复消息
     :param robot: 机器人类
@@ -309,30 +311,30 @@ def reply_event(robot: "Concerto", event: "Event", msg, reply=False, force=False
             )
             return send_msg(robot, {"msg_type": "private", "number": user_id, "msg": msg})
 
-def reply_id(robot: "Concerto", type, id, msg, force=False):
+def reply_id(robot: "Concerto", msg_type: str, uid: str, msg: str, force=False):
     """
     按id回复消息
     :param robot: 机器人类
-    :param type: 发送类型
-    :param id: 发送的对象id
+    :param msg_type: 发送类型 group,private
+    :param uid: 发送的对象id
     :param msg: 发送的消息内容
     :return: 发送消息后返回的json信息
     """
     msg = handle_placeholder(str(msg), robot.placeholder_dict)
     simple_msg = re.sub(r"\[CQ:image,file=base64.*\]", "[CQ:image,file=Base64Image]", msg)
     if not robot.config.is_silence or force:
-        if type == "group":
+        if msg_type == "group":
             robot.printf(
-                f"{Fore.GREEN}[SEND]{Fore.RESET}向群{Fore.MAGENTA}{get_group_name(robot, id)}({id}){Fore.RESET}发送消息：{simple_msg}"
+                f"{Fore.GREEN}[SEND]{Fore.RESET}向群{Fore.MAGENTA}{get_group_name(robot, uid)}({uid}){Fore.RESET}发送消息：{simple_msg}"
             )
-            return send_msg(robot, {"msg_type": "group", "number": id, "msg": msg})
+            return send_msg(robot, {"msg_type": "group", "number": uid, "msg": msg})
         else:
             robot.printf(
-                f"{Fore.GREEN}[SEND]{Fore.RESET}向{Fore.MAGENTA}{get_user_name(robot, id)}({id}){Fore.RESET}发送消息：{simple_msg}"
+                f"{Fore.GREEN}[SEND]{Fore.RESET}向{Fore.MAGENTA}{get_user_name(robot, uid)}({uid}){Fore.RESET}发送消息：{simple_msg}"
             )
-            return send_msg(robot, {"msg_type": "private", "number": id, "msg": msg})
+            return send_msg(robot, {"msg_type": "private", "number": uid, "msg": msg})
 
-def reply_back(robot: "Concerto", owner_id, msg):
+def reply_back(robot: "Concerto", owner_id: str, msg: str):
     """
     对reply_id方法的封装，对owner_id发送消息
     :param robot: 机器人类
@@ -344,7 +346,7 @@ def reply_back(robot: "Concerto", owner_id, msg):
     else:
         reply_id(robot, "group", owner_id[1:], msg)
 
-def quick_reply(robot: "Concerto", raw, msg):
+def quick_reply(robot: "Concerto", raw: dict, msg: str):
     """
     调用“.handle_quick_operation”接口的快捷回复消息
     :param robot: 机器人类
@@ -365,7 +367,7 @@ def quick_reply(robot: "Concerto", raw, msg):
         )
         return handle_quick_operation(robot, {"context": raw, "operation": {"reply": msg}})
 
-def read_forward_msg(robot: "Concerto", msg_id):
+def read_forward_msg(robot: "Concerto", msg_id: str):
     """
     获取转发消息内容
     :param robot: 机器人类
@@ -380,7 +382,7 @@ def read_forward_msg(robot: "Concerto", msg_id):
     else:
         return None
 
-def send_forward_msg(robot: "Concerto", nodes, group_id=None, user_id=None):
+def send_forward_msg(robot: "Concerto", nodes: dict, group_id=None, user_id=None):
     """
     发送转发消息
     :param robot: 机器人类
@@ -403,12 +405,12 @@ def send_forward_msg(robot: "Concerto", nodes, group_id=None, user_id=None):
         )
     return result
 
-def send_private_forward_msg(robot: "Concerto", node, user_id):
+def send_private_forward_msg(robot: "Concerto", node: dict, user_id: str):
     """
     发送私聊转发消息
     :param robot: 机器人类
-    :param group_id: 发送到QQ号
     :param node: 转发消息内容物
+    :param user_id: 发送到的用户ID
     :return: 发送消息后返回的json信息
     """
     data = {"user_id": user_id, "messages": node}
@@ -419,7 +421,7 @@ def send_private_forward_msg(robot: "Concerto", node, user_id):
         )
     return result
 
-def send_group_forward_msg(robot: "Concerto", node, group_id):
+def send_group_forward_msg(robot: "Concerto", node: dict, group_id: str):
     """
     发送群聊转发消息
     :param robot: 机器人类
@@ -435,7 +437,7 @@ def send_group_forward_msg(robot: "Concerto", node, group_id):
         )
     return result
 
-def reply_add(robot: "Concerto", raw, accept, msg):
+def reply_add(robot: "Concerto", raw: dict, accept: str, msg: str):
     """
     回复添加请求
     :param robot: 机器人类
@@ -452,27 +454,27 @@ def reply_add(robot: "Concerto", raw, accept, msg):
             }
         )
 
-def get_user_name(robot: "Concerto", id):
+def get_user_name(robot: "Concerto", uid: str):
     """
     获取用户信息
     :param robot: 机器人类
-    :param id: 用户的qq号
+    :param uid: 用户ID
     :return: 用户信息
     """
-    if not id:
+    if not uid:
         return
-    id = str(id)
-    if id in robot.user_dict:
-        return robot.user_dict[id]
+    uid = str(uid)
+    if uid in robot.user_dict:
+        return robot.user_dict[uid]
     else:
-        result = get_stranger_info(robot, {"user_id": id})
+        result = get_stranger_info(robot, {"user_id": uid})
         if status_ok(result):
             name = result["data"]["nickname"]
-            robot.user_dict[id] = name
+            robot.user_dict[uid] = name
             return name
         return ""
 
-def get_group_name(robot: "Concerto", group_id):
+def get_group_name(robot: "Concerto", group_id: str):
     """
     获取群信息
     :param robot: 机器人类
@@ -493,7 +495,7 @@ def get_group_name(robot: "Concerto", group_id):
         else:
             return ""
 
-def get_image_url(robot: "Concerto", file):
+def get_image_url(robot: "Concerto", file: str):
     """
     获取图片下载URL
     :param robot: 机器人类
@@ -519,14 +521,14 @@ def poke(robot: "Concerto", user_id: str, group_id=""):
     else:
         friend_poke(robot, resp_dict)
 
-def set_emoji(robot: "Concerto", message_id: str, emoji_id: str, set=True):
+def set_emoji(robot: "Concerto", message_id: str, emoji_id: str, is_set=True):
     """
     贴表情
     :param robot: 机器人类
     :param message_id: 消息ID
     :param set: 贴上/取下
     """
-    resp_dict = {"message_id": message_id, "emoji_id": emoji_id, "set": set}
+    resp_dict = {"message_id": message_id, "emoji_id": emoji_id, "set": is_set}
     return set_msg_emoji_like(robot, resp_dict)
 
 def group_sign(robot: "Concerto", group_id: str):
@@ -550,14 +552,23 @@ def group_member_info(robot: "Concerto", group_id: str, user_id: str):
 
 def group_special_title(robot: "Concerto", group_id: str, user_id: str, special_title: str):
     """
-    群称号
+    设置群成员专属头衔
     :param robot: 机器人类
     :param group_id: 群ID
     """
     resp_dict = {"group_id": group_id, "user_id": user_id, "special_title": special_title}
     return set_group_special_title(robot, resp_dict)
 
-def simplify_traceback(tb):
+def stranger_info(robot: "Concerto", user_id: int):
+    """
+    获取用户信息
+    :param robot: 机器人类
+    :param group_id: 群ID
+    """
+    resp_dict = {"user_id": user_id}
+    return get_stranger_info(robot, resp_dict)
+
+def simplify_traceback(tb: str):
     """
     获取错误报告并简化
     :param tb: 获取的错误报告
@@ -581,7 +592,32 @@ def get_error():
     """
     return traceback.format_exc().strip().rsplit("\n", maxsplit=1)[-1]
 
-def via(condition):
+def scan_missing_modules(file_path: str):
+    """
+    扫描单个py文件返回缺失模块列表
+    """
+    with open(file_path, "r", encoding="utf-8") as f:
+        tree = ast.parse(f.read(), filename=file_path)
+    missing = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                module_name = alias.name
+                try:
+                    importlib.import_module(module_name)
+                except ModuleNotFoundError as e:
+                    missing.add(e.name)
+                    if e.name != module_name:
+                        print(f"\r{traceback.format_exc()}")
+        elif isinstance(node, ast.ImportFrom):
+            if node.module:
+                try:
+                    importlib.import_module(node.module)
+                except ModuleNotFoundError:
+                    missing.add(node.module)
+    return missing
+
+def via(condition, success=True):
     """模块方法装饰器"""
     def decorator(func):
         def wrapper(self: "Module", *args, **kwargs):
@@ -589,16 +625,17 @@ def via(condition):
                 if self.robot.config.is_debug:
                     self.printf(f"执行{Fore.YELLOW}[{func.__name__}]{Fore.RESET}方法")
                 try:
+                    if success:
+                        self.success = True
                     return func(self, *args, **kwargs)
-                    self.success = True
                 except:
-                    self.errorf(f"{Fore.RED}执行{Fore.YELLOW}[{func.__name__}]{Fore.RED}方法发生错误！")
+                    self.errorf(f"{Fore.RED}执行{Fore.YELLOW}[{self.ID}.{func.__name__}]{Fore.RED}方法发生错误！")
                     self.errorf(Fore.RED + traceback.format_exc())
                     self.success = False
                     raise
             # else:
-            #     self.robot.printf(f"未满足执行`{func.__name__}`的条件")
-        wrapper._method = True
+            #     self.robot.printf(f"未满足[{self.ID}.{func.__name__}]的条件")
+        wrapper._method = True # pylint: disable=protected-access
         return wrapper
     return decorator
 
@@ -614,7 +651,7 @@ class Event:
         # 事件发生的时间戳
         self.time = raw.get("time", "")
         # 机器人自身QQ号
-        self.self_id = raw.get("self_id", "")
+        self.self_id = str(raw.get("self_id", ""))
         # 消息类型 private私聊 group群聊
         self.msg_type = raw.get("message_type", "")
         # 通知类型 notify常用通知 essence群精华消息 group_upload群文件上传 group_admin群变动 group_decrease群成员减少 group_increase群成员增加 group_ban群禁言 friend_add好友添加 group_recall群消息撤回 friend_recall好友消息撤回 group_card群成员名片更新 offline_file离线文件 client_status客户端状态变更
@@ -674,7 +711,7 @@ class Module:
         """执行类方法"""
         for attr_name in dir(self):
             attr = getattr(self, attr_name)
-            if callable(attr) and getattr(attr, "_method", False):
+            if not self.success and callable(attr) and getattr(attr, "_method", False):
                 attr()
 
     def au(self, max_level=3, min_level=0):
@@ -733,7 +770,7 @@ class Module:
 
     def save_config(self, config_content=None, owner_id=""):
         """保存模块配置"""
-        if owner_id:
+        if owner_id and config_content:
             self.config[owner_id] = config_content
         elif config_content:
             self.config = config_content

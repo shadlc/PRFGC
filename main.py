@@ -20,7 +20,7 @@ robot = Concerto()
 
 # 检测运行平台是否为Linux，导入readline模块实现TAB补全和历史命令读取
 if platform.system() == "Linux":
-    import readline
+    import readline # pylint: disable=import-error
 
     # 命令自动补全
     def completer(text, state):

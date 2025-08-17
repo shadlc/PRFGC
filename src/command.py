@@ -561,7 +561,6 @@ class ExecuteCmd(object):
         self.printf("重载配置文件成功！")
 
     def reply(self, argv=""):
-        print(self.robot.latest_data)
         if (
             len(self.robot.data) == 0
             or self.robot.latest_data not in self.robot.data

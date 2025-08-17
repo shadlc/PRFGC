@@ -14,7 +14,7 @@ from colorama import Fore
 
 from src.config import Config
 from src.utils import (
-    Event, Module, handle_placeholder, import_json, msg_img2char, reply_event, simplify_traceback, receive_msg
+    Event, Module, handle_placeholder, import_json, msg_img2char, reply_event, scan_missing_modules, simplify_traceback, receive_msg
 )
 from src.command import ExecuteCmd
 
@@ -53,7 +53,7 @@ class Concerto:
         self.self_message = deque(maxlen=20)
         self.user_dict = {}
         self.group_dict = {}
-        self.data: {Memory} = {}
+        self.data: dict[str, Memory] = {}
         self.past_message = deque(maxlen=20)
         self.past_notice = deque(maxlen=20)
         self.past_request = deque(maxlen=20)
@@ -177,7 +177,9 @@ class Concerto:
 
         def execute_msg(event: Event, auth):
             try:
-                for mod in self.modules.values():
+                for name, mod in self.modules.items():
+                    if name == "Notice":
+                        continue
                     if mod(event, auth).success:
                         break
             except Exception:
@@ -261,18 +263,22 @@ class Concerto:
                 item_path = os.path.join(folder_path, item)
                 if item.endswith(".py"):
                     module_name = os.path.splitext(item)[0]
+                    missing = scan_missing_modules(item_path)
+                    if missing:
+                        self.errorf(f"文件[{item}]缺失模块: {" ".join(missing)}, 加载失败!")
+                        continue
                     spec = importlib.util.spec_from_file_location(module_name, item_path)
                     module = importlib.util.module_from_spec(spec)
                     spec.loader.exec_module(module)
                     is_module = False
-                    for name, obj in vars(module).items():
+                    for _, obj in vars(module).items():
                         if isinstance(obj, type) and hasattr(obj, "ID") and obj.ID and hasattr(obj, "NAME") and obj.NAME:
                             is_module = True
                             self.module_enable(obj, item)
                             if hasattr(obj, "AUTO_INIT") and obj.AUTO_INIT:
                                 obj(Event(self))
                     if not is_module:
-                        self.errorf(f"文件[{item}]内没有有效的模块, 加载此模块失败!")
+                        self.errorf(f"文件[{item}]内没有有效的模块, 加载失败!")
         import_classes("modules")
 
     def module_enable(self, module: Module, module_file: str):
@@ -288,6 +294,15 @@ class Concerto:
         else:
             self.modules[module.ID] = module
             self.printf(f"{Fore.YELLOW}[{module.ID}] {Fore.RESET}{module.NAME}({module_file})已接入！")
+    
+    def format_to_log(self, text: str) -> str:
+        """
+        格式化为日志友好型文本
+        :param text: 输入文本
+        """
+        text = re.sub(r"\x1B\[[0-?]*[ -/]*[@-~]", "", text)
+        text = re.sub(r"█+", "[图片]", text)
+        return text.strip()
 
     def printf(self, msg, end="\n", console=True, flush=False):
         """
@@ -306,7 +321,7 @@ class Concerto:
             print(f"{prefix}{msg}", end=end, flush=flush)
         if console:
             print(f"\r{Fore.GREEN}<console> {Fore.RESET} ", end="")
-        logger.info("%s", re.sub(r"\x1B\[[0-?]*[ -/]*[@-~]", "", f"{prefix}{msg}").strip())
+        logger.info("%s", self.format_to_log(f"{prefix}{msg}"))
 
     def warnf(self, msg, end="\n", console=True):
         """
@@ -320,7 +335,7 @@ class Concerto:
         prefix = "\r[" + time.strftime("%H:%M:%S", time.localtime()) + " WARN] "
         msg = f"{Fore.YELLOW}{prefix}{msg}{Fore.RESET}"
         print(msg, end=end)
-        logger.info("%s", re.sub(r"\x1B\[[0-?]*[ -/]*[@-~]", "", msg).strip())
+        logger.info("%s", self.format_to_log(msg))
         if console:
             print(f"\r{Fore.GREEN}<console> {Fore.RESET} ", end="")
 
@@ -335,6 +350,6 @@ class Concerto:
         prefix = "\r[" + time.strftime("%H:%M:%S", time.localtime()) + " ERROR] "
         msg = f"{Fore.RED}{prefix}{msg}{Fore.RESET}"
         print(msg, end=end)
-        logger.info("%s", re.sub(r"\x1B\[[0-?]*[ -/]*[@-~]", "", msg).strip())
+        logger.info("%s", self.format_to_log(msg))
         if console:
             print(f"\r{Fore.GREEN}<console> {Fore.RESET} ", end="")

@@ -24,7 +24,7 @@ class Notice(Module):
         and self.event.sub_type == "poke"
         and not self.is_self_send())
     def poke(self):
-        if self.event.group_id:
+        if self.event.group_id and self.event.group_id in self.robot.config.rev_group:
             self.printf(
                 f"在群{Fore.MAGENTA}{self.event.group_name}({self.event.group_id}){Fore.RESET}接收来自"
                 f"{Fore.MAGENTA}{self.event.user_name}({self.event.user_id}){Fore.RESET}的戳一戳"
@@ -45,6 +45,8 @@ class Notice(Module):
                 f"尝试对{Fore.MAGENTA}{self.event.user_name}({self.event.user_id}){Fore.RESET}进行反戳"
             )
             poke(self.robot, self.event.user_id)
+            if random.choice(range(5)) == 0:
+                reply_id(self.robot, "private", self.event.user_id, "%BE_POKED%")
 
     @via(lambda self: self.event.notice_type == "notify"
         and self.event.sub_type == "input_status"
@@ -87,6 +89,8 @@ class Notice(Module):
             "%Y年%m月%d日%H:%M:%S", time.localtime(self.event.time)
         )
         recall_message = None
+        if self.event.group_id not in self.robot.config.rev_group:
+            return
         if (
             self.event.user_id == self.robot.self_id
             and self.event.operator_id != self.robot.self_id
@@ -107,7 +111,6 @@ class Notice(Module):
                 else:
                     msg = f"{self.event.operator_name}在{recall_time}将{self.event.user_name}的一条消息撤回，但是%ROBOT_NAME%记不得了..."
                 reply_id(self.robot, "group", self.event.group_id, msg)
-        print(self.NAME, "else")
 
     @via(lambda self: self.event.notice_type == "group_upload")
     def group_upload(self):
@@ -154,7 +157,7 @@ class Notice(Module):
         if self.event.user_id == self.robot.self_id:
             msg = "%SELF_INTRODUCTION%"
             reply_id(self.robot, "group", self.event.group_id, msg)
-        else:
+        elif self.event.group_id in self.robot.config.rev_group:
             msg = self.event.user_name + "%WELCOME_NEWBIE%"
             reply_id(self.robot, "group", self.event.group_id, msg)
 

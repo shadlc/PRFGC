@@ -219,20 +219,20 @@ class Message(Module):
             msg = self.match(r"说\s?(\S*)").groups()[0]
         self.reply(msg)
 
-    @via(lambda self: self.at_or_private() and self.au(1) and self.match(r"^(开启|关闭)?防撤回$"))
-    def recall_setting(self):
-        flag = self.config[self.owner_id].get("recall", False)
-        text = "开启" if flag else "关闭"
-        if self.match(r"(开启|打开|启用|允许)"):
-            flag = True
-            text = "开启"
-        elif self.match(r"(关闭|禁止|不允许|取消)"):
-            flag = False
-            text = "关闭"
-        msg = f"群防撤回已{text}"
-        self.config[self.owner_id]["recall"] = flag
-        self.save_config(self.config[self.owner_id], self.owner_id)
-        self.reply(msg)
+    # @via(lambda self: self.at_or_private() and self.au(1) and self.match(r"^(开启|关闭)?防撤回$"))
+    # def recall_setting(self):
+    #     flag = self.config[self.owner_id].get("recall", False)
+    #     text = "开启" if flag else "关闭"
+    #     if self.match(r"(开启|打开|启用|允许)"):
+    #         flag = True
+    #         text = "开启"
+    #     elif self.match(r"(关闭|禁止|不允许|取消)"):
+    #         flag = False
+    #         text = "关闭"
+    #     msg = f"群防撤回已{text}"
+    #     self.config[self.owner_id]["recall"] = flag
+    #     self.save_config(self.config[self.owner_id], self.owner_id)
+    #     self.reply(msg)
 
     @via(lambda self: self.at_or_private() and self.au(1) and self.match(r"^(开启|关闭)?静默(模式)?$"))
     def silence(self):
