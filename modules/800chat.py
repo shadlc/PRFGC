@@ -17,10 +17,14 @@ from wordcloud import WordCloud
 
 from src.utils import (
     Module,
+    build_node,
     get_error,
+    get_user_name,
+    send_forward_msg,
     status_ok,
     stranger_info,
     via,
+    read_msg,
 )
 
 class Chat(Module):
@@ -30,10 +34,18 @@ class Chat(Module):
     NAME = "消息处理模块"
     HELP = {
         2: [
-            "(打开|关闭)词云 | 打开或关闭词云记录(默认关闭)",
-            "词云配色 [配色代码] | 更改词云配色"
+            "[时间段]词云 | 生成某一时间段的词云",
+            "为XXX生成[时间段]的词云 | 生成某人某一时间段的词云",
+            "[时间段]复读排行榜 | 生成某一时间段的复读排行榜",
             "[QQ账号或昵称]又叫做[称号] | 记录成员的称号",
             "成员列表 | 查看曾有称号记录在案的成员列表和称号",
+            "[QQ账号或昵称]曾说过: | 假装有人说过",
+            "刚刚撤回了什么 | 查看上一个撤回消息内容",
+            "回复表情图片并@机器人(空内容) | 将表情包转化为链接",
+        ],
+        1: [
+            "(打开|关闭)词云 | 打开或关闭词云记录(默认关闭)",
+            "词云配色 [配色代码] | 更改词云配色",
         ],
     }
     CONFIG = "chat.json"
@@ -56,7 +68,7 @@ class Chat(Module):
         }
     }
 
-    @via(lambda self: self.at_or_private() and self.au(2) and self.match(r"^\S?\S?\S?\S?词云"))
+    @via(lambda self: self.at_or_private() and self.au(2) and self.match(r"词云"), success=False)
     def wordcloud(self):
         """词云"""
         if self.match(r"(开启|启用|打开|记录|启动|关闭|禁用|取消)"):
@@ -68,10 +80,10 @@ class Chat(Module):
         elif self.match(r"(主题|颜色|色彩|方案|配色)"):
             self.wordcloud_colormap()
             return
-        else:
+        elif result := self.match(r"(给|为)?([^\s].?)?(生成)?(今天|今日|本日|这天|昨天|昨日|前天|前日|本周|这周|此周|这个?礼拜|这个?星期|上周|上个?礼拜|上个?星期|本月|这月|次月|这个月|上个?月|今年|本年|此年|这一?年|去年|上一?年)?的?词云"):
             if self.config[self.owner_id]["wordcloud"]["enable"]:
                 gen_type = "all"
-                if self.match(r"(今天|今日)"):
+                if self.match(r"(今天|今日|本日|这天)"):
                     msg = "正在生成今日词云..."
                     gen_type = "today"
                 elif self.match(r"(昨天|昨日)"):
@@ -95,12 +107,19 @@ class Chat(Module):
                 elif self.match(r"(今年|本年|此年|这一?年)"):
                     msg = "正在生成今年词云..."
                     gen_type = "this_year"
-                elif self.match(r"(去年|上个?年)"):
+                elif self.match(r"(去年|上一?年)"):
                     msg = "正在生成去年词云..."
                     gen_type = "last_year"
                 else:
                     msg = "正在生成历史词云..."
-                text = self.read_wordcloud()
+                user_name = result.groups()[1]
+                user_id = None
+                if user_name:
+                    user_id = self.get_uid(user_name)
+                    if not user_id:
+                        self.reply(f"未找到关于{user_name}的消息记录")
+                        return
+                text = self.read_wordcloud(gen_type, self.owner_id, user_id)
                 if not text:
                     msg = "没有消息记录哦~"
                     self.reply(msg)
@@ -108,7 +127,7 @@ class Chat(Module):
                 msg += "请耐心等待..."
                 self.reply(msg)
                 try:
-                    url = self.generate_wordcloud(gen_type)
+                    url = self.generate_wordcloud(text)
                     msg = f"[CQ:image,file={url}]"
                 except Exception:
                     self.errorf(traceback.format_exc())
@@ -117,6 +136,9 @@ class Chat(Module):
                 msg = "请先开启开启词云记录哦~"
             else:
                 msg = "没有任何词云记录哦~"
+        else:
+            return
+        self.success = True
         self.reply(msg)
 
     @via(lambda self: self.at_or_private() and self.au(2) and self.match(r"^(开启|启用|打开|记录|启动|关闭|禁用|取消)?复读(统计|记录|排行)$"))
@@ -161,9 +183,59 @@ class Chat(Module):
                 msg = "请先开启复读记录哦~"
         self.reply(msg)
 
+    @via(lambda self: self.at_or_private() and self.au(2) and self.match(r"^\s*(\s?(\S+)(说|言)(道|过)?(:|：)(\S+)\s?)+\s*$"))
+    def once_said(self):
+        """曾言道"""
+        msg_said = re.findall(r"(\S+)(说|言)(道|过)?(:|：)(\S+)", self.event.msg)
+        msg_list = []
+        for said in msg_said:
+            name = re.sub(r"曾?经?又?还?也?$", "", said[0])
+            content = said[-1]
+            uid = self.get_uid(name)
+            if uid in self.config[self.owner_id]["users"]:
+                name = self.config[self.owner_id]["users"][uid]["nickname"]
+            elif name.isdigit():
+                name = get_user_name(self.robot, name)
+            if re.search(r"^(我|吾|俺|朕|孤)$", name):
+                name = self.event.user_name
+                uid = self.event.user_id
+            msg_list.append(build_node(content, user_id=uid, nickname=name))
+        if msg_list:
+            if self.event.group_id:
+                send_forward_msg(self.robot, msg_list, group_id=self.event.group_id)
+            else:
+                send_forward_msg(self.robot, msg_list, user_id=self.event.user_id)
+        else:
+            msg = "生成转发消息错误~"
+            self.reply(msg)
+
+    @via(lambda self: self.at_or_private() and self.au(2) and self.match(r"^(刚刚|刚才|先前)?(说|撤回)了?(什么|啥)$"))
+    def what_recall(self):
+        """撤回了什么"""
+        if self.au(2, 2):
+            pass
+        elif message := self.robot.data.get("latest_recall",{}).get(self.owner_id):
+            user_name = message.get("sender",{}).get("nickname","")
+            content = message.get("raw_message","")
+            msg = f"刚刚{user_name}撤回了一条消息:\n\n{content}"
+            self.reply(msg)
+        else:
+            self.reply("什么也没有哦~")
+
+    @via(lambda self: self.at_or_private() and self.au(2) and self.match(r"^\s*\[CQ:reply,id=([^\]]+?)\]\s*$"), success=False)
+    def sticker_to_img(self):
+        """表情转图片"""
+        msg_id = self.match(r"^\s*\[CQ:reply,id=([^\]]+?)\]\s*$").groups()[0]
+        reply_msg = read_msg(self.robot, msg_id)
+        if status_ok(reply_msg) and re.match(r"^\s*\[CQ:image,([^\]]+?)\]\s*$", reply_msg["data"]["message"]):
+            file, url = re.match(r"^\s*\[CQ:image,.*file=([^,\]]+?),.*url=([^,\]]+?),.*\]\s*$", reply_msg["data"]["message"]).groups()
+            msg = f"{url}"
+            self.reply(msg)
+            self.success = True
+
     @via(
         lambda self: self.at_or_private()
-        and self.au(1)
+        and self.au(2)
         and self.match(r"(\S+?)(又|也|同时)能?被?(称|叫)(为|做)?(\S+)$")
     )
     def set_label(self):
@@ -203,7 +275,8 @@ class Chat(Module):
             msg += "\n======================="
         self.reply(msg)
 
-    @via(lambda self: self.event.user_id not in self.config[self.owner_id]["users"], success=False)
+    @via(lambda self: self.event.user_id not in self.config[self.owner_id]["users"]
+         or self.event.user_name != self.config[self.owner_id]["users"].get(self.event.user_id,{}).get("nickname",""), success=False)
     def z_record_user(self):
         """用户记录"""
         self.record_user(self.event.user_id, self.event.user_name)
@@ -211,7 +284,7 @@ class Chat(Module):
     @via(lambda self: self.config[self.owner_id]["wordcloud"]["enable"], success=False)
     def z_record_msg(self):
         """聊天消息记录"""
-        msg = re.sub(r"((\[|【|{).*(\]|】|})|\n|\s)", "", self.event.msg)
+        msg = re.sub(r"((\[|【|{).*(\]|】|}))", "", self.event.msg)
         msg = re.sub(r"http[s]?://\S+", "", msg)
         self.store_wordcloud(
             self.owner_id,
@@ -228,6 +301,9 @@ class Chat(Module):
 
     def record_user(self, uid: str, name: str, label: str=""):
         """记录用户称号"""
+        info = self.config[self.owner_id]["users"].get("uid")
+        if info and info.get("label") == "":
+            label = info.get("label")
         self.config[self.owner_id]["users"][uid] = {"nickname": name, "label": label}
         self.save_config()
 
@@ -310,21 +386,38 @@ class Chat(Module):
         except Exception:
             self.errorf("保存消息记录失败:\n" + traceback.format_exc())
 
-    def read_wordcloud(self):
+    def read_wordcloud(self, gen_type: str, owner_id: str, user_id: str = None):
         """读取当前会话下的所有消息并拼接为字符串返回
-        只用于产生是否存在记录的快速判断（返回空字符串表示无记录）
+        gen_type 可选：today, yesterday, before_yesterday, this_week,
+        last_week, this_month, last_month, this_year, last_year, all
         """
-        wordcloud_db = self.get_db_path()
         try:
-            conn = sqlite3.connect(wordcloud_db)
-            self.init_wordcloud_db(conn)
-            cur = conn.cursor()
-            cur.execute(
-                "SELECT text FROM wordcloud WHERE owner_id=? ORDER BY date ASC",
-                (self.owner_id,)
-            )
-            rows = cur.fetchall()
-            conn.close()
+            wordcloud_db = self.get_db_path()
+            date_range = self.get_date_range(gen_type)
+
+            query = "SELECT text FROM wordcloud"
+            conditions = ["owner_id=?"]
+            params = [owner_id]
+
+            if user_id:
+                conditions.append("user_id=?")
+                params.append(user_id)
+
+            if date_range != (None, None):
+                start_date = date_range[0].strftime("%Y%m%d")
+                end_date = date_range[1].strftime("%Y%m%d")
+                conditions.append("date>=?")
+                conditions.append("date<=?")
+                params.extend([start_date, end_date])
+
+            where_clause = " WHERE " + " AND ".join(conditions)
+            query = f"{query}{where_clause} ORDER BY date ASC"
+
+            with sqlite3.connect(wordcloud_db) as conn:
+                self.init_wordcloud_db(conn)
+                cur = conn.cursor()
+                cur.execute(query, params)
+                rows = cur.fetchall()
             if not rows:
                 return ""
             texts = [r[0] for r in rows if r[0]]
@@ -371,32 +464,8 @@ class Chat(Module):
             return None, None
         return s, e
 
-    def generate_wordcloud(self, gen_type: str):
-        """
-        生成词云图片（输出为工作目录下的 wordcloud.png）
-        gen_type 可选：today, yesterday, before_yesterday, this_week,
-        last_week, this_month, last_month, this_year, last_year, all
-        """
-
-        wordcloud_db = self.get_db_path()
-        date_range = self.get_date_range(gen_type)
-        conn = sqlite3.connect(wordcloud_db)
-        self.init_wordcloud_db(conn)
-        cur = conn.cursor()
-        if date_range == (None, None):
-            cur.execute("SELECT text FROM wordcloud WHERE owner_id=?", (self.owner_id,))
-        else:
-            start_date = date_range[0].strftime("%Y%m%d")
-            end_date = date_range[1].strftime("%Y%m%d")
-            cur.execute(
-                "SELECT text FROM wordcloud WHERE owner_id=? AND date>=? AND date<=? ORDER BY date ASC",
-                (self.owner_id, start_date, end_date),
-            )
-        rows = cur.fetchall()
-        conn.close()
-
-        texts = [r[0] for r in rows if r and r[0]]
-        raw_text = "\n".join(texts)
+    def generate_wordcloud(self, text: str):
+        """生成词云图片并返回 base64 URI(base64://...)"""
 
         stopwords = set()
         stopwords_path = os.path.join(
@@ -408,7 +477,7 @@ class Chat(Module):
         except FileNotFoundError as e:
             raise FileNotFoundError(f"未找到可用的停词表: {e.filename}") from e
         stopwords = set(lines)
-        words = jieba.lcut(raw_text)
+        words = jieba.lcut(text)
         filtered = []
         for w in words:
             w = w.strip()
@@ -416,7 +485,6 @@ class Chat(Module):
                 continue
             if w in stopwords:
                 continue
-            # 可选：过滤标点及非中文/字母数字
             if re.fullmatch(r"[\s\W_]+", w):
                 continue
             filtered.append(w)

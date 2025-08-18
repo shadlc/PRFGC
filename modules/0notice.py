@@ -5,7 +5,7 @@ import time
 
 from colorama import Fore
 
-from src.utils import Module, calc_size, poke, reply_id, via
+from src.utils import Module, calc_size, poke, reply_id, via, get_user_name
 
 
 class Notice(Module):
@@ -16,9 +16,7 @@ class Notice(Module):
     HELP = None
     CONFIG = "data.json"
     GLOBAL_CONFIG = None
-    CONV_CONFIG = {
-        "recall": False
-    }
+    CONV_CONFIG = None
 
     @via(lambda self: self.event.notice_type == "notify"
         and self.event.sub_type == "poke"
@@ -95,22 +93,21 @@ class Notice(Module):
             self.event.user_id == self.robot.self_id
             and self.event.operator_id != self.robot.self_id
             and self.event.operator_id not in self.robot.admin_id
+            and random.choice(1)
         ):
             msg = f"{self.event.operator_name}在{recall_time}将%ROBOT_NAME%的消息撤回，%ROBOT_NAME%很难过"
             reply_id(self.robot, "group", self.event.group_id, msg)
         elif self.event.user_id != self.robot.self_id:
-            if self.config[self.owner_id].get("recall"):
-                for message in self.data.past_message:
-                    if (
-                        "message_id" in message
-                        and self.event.msg_id == message["message_id"]
-                    ):
-                        recall_message = message["raw_message"]
-                if recall_message is not None:
-                    msg = f"%OTHER_RECALL%\n{self.event.operator_name}在{recall_time}试图将{self.event.user_name}的一条消息“{recall_message}”撤回，%ROBOT_NAME%还记得"
-                else:
-                    msg = f"{self.event.operator_name}在{recall_time}将{self.event.user_name}的一条消息撤回，但是%ROBOT_NAME%记不得了..."
-                reply_id(self.robot, "group", self.event.group_id, msg)
+            for message in self.data.past_message:
+                if self.event.msg_id == message.get("message_id"):
+                    if not self.robot.data.get("latest_recall"):
+                        self.robot.data["latest_recall"] = {}
+                    self.robot.data["latest_recall"][self.owner_id] = message
+            # if recall_message is not None:
+            #     msg = f"%OTHER_RECALL%\n{self.event.operator_name}在{recall_time}试图将{self.event.user_name}的一条消息“{recall_message}”撤回，%ROBOT_NAME%还记得"
+            # else:
+            #     msg = f"{self.event.operator_name}在{recall_time}将{self.event.user_name}的一条消息撤回，但是%ROBOT_NAME%记不得了..."
+            # reply_id(self.robot, "group", self.event.group_id, msg)
 
     @via(lambda self: self.event.notice_type == "group_upload")
     def group_upload(self):
@@ -141,6 +138,11 @@ class Notice(Module):
             self.printf(
                 f"{Fore.MAGENTA}{self.event.user_name}({self.event.user_id}){Fore.RESET}被踢出群{Fore.MAGENTA}{self.event.group_name}({self.event.group_id}){Fore.RESET}"
             )
+        elif self.event.sub_type == "disband":
+            operator_name = get_user_name(self.event.operator_id)
+            self.printf(
+                f"{Fore.MAGENTA}{operator_name}({self.event.operator_id}){Fore.RESET}已将群{Fore.MAGENTA}{self.event.group_name}({self.event.group_id}){Fore.RESET}解散"
+            )
 
     @via(lambda self: self.event.notice_type == "group_increase")
     def group_increase(self):
@@ -153,7 +155,6 @@ class Notice(Module):
                 f"{Fore.MAGENTA}{self.event.user_name}({self.event.user_id}){Fore.RESET}已被邀请加入群{Fore.MAGENTA}{self.event.group_name}({self.event.group_id}){Fore.RESET}"
             )
 
-        self.printf(str(self.event.user_id) + "|" + str(self.robot.self_id))
         if self.event.user_id == self.robot.self_id:
             msg = "%SELF_INTRODUCTION%"
             reply_id(self.robot, "group", self.event.group_id, msg)

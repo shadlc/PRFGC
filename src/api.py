@@ -239,3 +239,8 @@ def get_group_member_info(robot: "Concerto", resp_dict):
     """获取群成员信息"""
     url = "/get_group_member_info"
     return post(robot, url, resp_dict)
+
+def bot_exit(robot: "Concerto"):
+    """退出机器人"""
+    url = "/bot_exit"
+    return get(robot, url)

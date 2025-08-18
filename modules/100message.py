@@ -21,13 +21,14 @@ class Message(Module):
             "信息 | 获取机器人基础信息",
             "调试 | 开关调试模式",
             "静默 | 开关静默模式",
+            "向(群)说[文字] | 操控机器人发消息",
         ],
         2: [
             "测试 | 进行基准测试",
             "语音 [文字] | 文字转语音",
-            "向(群)说[文字] | 操控机器人发消息",
         ], 
         3: [
+            "帮助 | 展示机器人全部可用功能",
             "权限 | 查看权限等级",
             "计时 [数字] | 进行异步计时",
         ]
@@ -36,26 +37,27 @@ class Message(Module):
     GLOBAL_CONFIG = {
         "ip_test_token": ""
     }
-    CONV_CONFIG = {
-        "recall": False
-    }
+    CONV_CONFIG = None
 
-    @via(lambda self: self.at_or_private() and self.au(3) and self.match(r"^帮助$"))
+    @via(lambda self: self.at_or_private() and self.au(3) and self.match(r"^帮助\d$"))
     def help(self):
+        auth_level = self.auth
+        if self.match(r"帮助(\d)"):
+            auth_level = int(self.match(r"帮助(\d)").groups()[0])
         help_list = []
         for mod in self.robot.modules.values():
             if mod.NAME is None or not isinstance(mod.HELP, dict):
                 continue
             help_text = ""
             for i in range(4):
-                if self.au(i):
+                if auth_level <= i:
                     for text in mod.HELP.get(i, []):
                         help_text += f"{text}\n"
             if help_text:
                 help_text = f"{mod.NAME}帮助\n\n{help_text}"
-                help_list.append(build_node(help_text.strip(), nickname=self.robot.self_name))
+                help_list.append(build_node(help_text.strip()))
         nodes = [
-            build_node("ConcertBot HELP", nickname=self.robot.self_name),
+            build_node("ConcertBot HELP"),
             *help_list
         ]
         if self.event.group_id:
@@ -166,10 +168,6 @@ class Message(Module):
         msg += f"\n应用名：{info["app_name"]}"
         msg += f"\n版本号：{info["app_version"]}"
         msg += f"\n协议版本：{info["protocol_version"]}"
-        msg += "\n==========内部信息=========="
-        msg += f"\n调试模式: {self.robot.config.is_debug}"
-        msg += f"\n管理员列表：{self.robot.config.admin_list}"
-        msg += f"\n对接群列表：{self.robot.config.rev_group}"
         msg += f"\n已安装模块：{[f"{i.NAME}({i.ID})" for i in self.robot.modules.values()]}"
         self.reply(msg)
 
@@ -219,21 +217,6 @@ class Message(Module):
             msg = self.match(r"说\s?(\S*)").groups()[0]
         self.reply(msg)
 
-    # @via(lambda self: self.at_or_private() and self.au(1) and self.match(r"^(开启|关闭)?防撤回$"))
-    # def recall_setting(self):
-    #     flag = self.config[self.owner_id].get("recall", False)
-    #     text = "开启" if flag else "关闭"
-    #     if self.match(r"(开启|打开|启用|允许)"):
-    #         flag = True
-    #         text = "开启"
-    #     elif self.match(r"(关闭|禁止|不允许|取消)"):
-    #         flag = False
-    #         text = "关闭"
-    #     msg = f"群防撤回已{text}"
-    #     self.config[self.owner_id]["recall"] = flag
-    #     self.save_config(self.config[self.owner_id], self.owner_id)
-    #     self.reply(msg)
-
     @via(lambda self: self.at_or_private() and self.au(1) and self.match(r"^(开启|关闭)?静默(模式)?$"))
     def silence(self):
         if self.match(r"^开启"):
@@ -254,8 +237,8 @@ class Message(Module):
     def test(self):
         if self.match(r"^测试错误"):
             raise RuntimeError("测试错误")
-        elif self.match(r"^测试ip\s(\S*)"):
-            ip = self.match(r"^测试ip\s(\S*)").groups()[0]
+        elif self.match(r"^测试(ip|IP)\s(\S*)"):
+            ip = self.match(r"^测试(ip|IP)\s(\S*)").groups()[0]
             headers = {
                 "Content-Type": "application/json;charset=UTF-8",
                 "token": self.config.get("ip_test_token",""),

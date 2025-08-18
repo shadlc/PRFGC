@@ -180,12 +180,11 @@ def msg_img2char(config: Config, msg: str):
     :param color: 是否渲染颜色
     :return: 转化为字符画的消息
     """
-    while re.search(r"\[CQ:image.*?url=(.*?)\]", msg) and "[RECEIVE]" in msg:
+    while re.search(r"\[CQ:image.*url=(.*?),.*\]", msg) and "[RECEIVE]" in msg:
         try:
-            url = re.search(r"\[CQ:image.*?url=(.*?)\]", msg).groups()[0]
-            img = Image.open(io.BytesIO(
-                requests.get(url, timeout=3).content    
-            )).convert("RGB")
+            url = re.search(r"\[CQ:image.*url=(.*?),.*\]", msg).groups()[0]
+            data = requests.get(url, timeout=3)
+            img = Image.open(io.BytesIO(data.content)).convert("RGB")
             w, h = img.size
             ratio = h / float(w)
             target_w = sorted([config.min_image_width, w, config.max_image_width])[1]
@@ -218,7 +217,8 @@ def msg_img2char(config: Config, msg: str):
                 re.search(r"(\[CQ:image.*?url=(.*?)\])", msg).groups()[0], "\n" + char
             )
         except Exception:
-            # 不应影响显示
+            if config.is_debug:
+                traceback.print_exc()
             return msg
     return msg
 
@@ -255,7 +255,10 @@ def build_msg(text: str):
     return data
 
 def build_node(*args, **kwargs):
-    """生成一个转发节点"""
+    """
+    生成一个转发节点
+    user_id,nickname,content
+    """
     content = list(args) if args else []
     if isinstance(content, list) and len(content) == 1:
         content = content[0]
@@ -367,6 +370,15 @@ def quick_reply(robot: "Concerto", raw: dict, msg: str):
         )
         return handle_quick_operation(robot, {"context": raw, "operation": {"reply": msg}})
 
+def read_msg(robot: "Concerto", msg_id: str):
+    """
+    获取消息内容
+    :param robot: 机器人类
+    :param msg_id: 消息ID
+    :return: 消息内容
+    """
+    return get_msg(robot, {"message_id": msg_id})
+
 def read_forward_msg(robot: "Concerto", msg_id: str):
     """
     获取转发消息内容
@@ -401,7 +413,7 @@ def send_forward_msg(robot: "Concerto", nodes: dict, group_id=None, user_id=None
     result = post(robot, "/send_forward_msg", data)
     if status_ok(result):
         robot.self_message.append(
-            get_msg(robot, {"message_id": result["data"]["message_id"]})["data"]
+            read_msg(robot, result["data"]["message_id"])["data"]
         )
     return result
 
@@ -417,7 +429,7 @@ def send_private_forward_msg(robot: "Concerto", node: dict, user_id: str):
     result = post(robot, "/send_private_forward_msg", data)
     if status_ok(result):
         robot.self_message.append(
-            get_msg(robot, {"message_id": result["data"]["message_id"]})["data"]
+            read_msg(robot, result["data"]["message_id"])["data"]
         )
     return result
 
@@ -433,7 +445,7 @@ def send_group_forward_msg(robot: "Concerto", node: dict, group_id: str):
     result = post(robot, "/send_group_forward_msg", data)
     if status_ok(result):
         robot.self_message.append(
-            get_msg(robot, {"message_id": result["data"]["message_id"]})["data"]
+            read_msg(robot, result["data"]["message_id"])["data"]
         )
     return result
 
@@ -576,7 +588,11 @@ def simplify_traceback(tb: str):
     """
     result = "按从执行顺序排序有\n"
     tb = tb.strip().split("\n")
+    exclude = True
     for excepts in tb[1:]:
+        if exclude and "__init__" not in excepts:
+            continue
+        exclude = False
         if re.search(r"(\\|/)(\w*?\.py).*line\s([0-9]+).*in\s(.*)", excepts):
             temp = re.search(
                 r"(\\|/)(\w*?\.py).*line\s([0-9]+).*in\s(.*)", excepts

@@ -18,7 +18,7 @@ from src.api import (
     del_msg, get_group_msg_history,
     get, get_version_info, ocr_image,
     send_group_notice, set_model_show,
-    get_login_info
+    get_login_info, bot_exit
 )
 
 if TYPE_CHECKING:
@@ -35,7 +35,7 @@ class ExecuteCmd(object):
             "deop": "取消管理员权限",
             "device": "设置在线机型",
             "emoji": "对某条消息ID贴表情(默认❤)",
-            "exit": "关闭程序",
+            "exit": "退出机器人",
             "get": "获取用户或群的信息",
             "group": "修改对接群列表",
             "groupmsg": "发送群聊消息",
@@ -169,6 +169,13 @@ class ExecuteCmd(object):
                 self.warnf(f"贴表情出错 {result.get("message")}")
         else:
             self.printf(f"请使用 {Fore.CYAN}emoji 消息ID{Fore.RESET} 进行贴表情")
+
+    def exit(self, argv=""):
+        result = bot_exit(self.robot)
+        if status_ok(result):
+            self.printf(f"机器人已退出")
+        else:
+            self.warnf(f"机器人退出失败")
 
     def get(self, argv=""):
         if re.search(r"user\s+(\d+)", argv):

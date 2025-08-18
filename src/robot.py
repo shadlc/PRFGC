@@ -183,10 +183,12 @@ class Concerto:
                     if mod(event, auth).success:
                         break
             except Exception:
+                if event.group_id != "" and event.group_id not in self.config.rev_group:
+                    return
                 if self.config.is_debug:
                     reply_event(self, event, f"%FATAL_ERROR%\n{traceback.format_exc()}")
                 else:
-                    reply_event(self, event, f"%FATAL_ERROR%{simplify_traceback(traceback.format_exc())}")
+                    reply_event(self, event, f"%FATAL_ERROR%\n{simplify_traceback(traceback.format_exc())}")
 
         threading.Thread(target=execute_msg, args=[event, auth], daemon=True).start()
 
@@ -301,7 +303,7 @@ class Concerto:
         :param text: 输入文本
         """
         text = re.sub(r"\x1B\[[0-?]*[ -/]*[@-~]", "", text)
-        text = re.sub(r"█+", "[图片]", text)
+        text = re.sub(r"(█+\s*)+", "[图片]", text)
         return text.strip()
 
     def printf(self, msg, end="\n", console=True, flush=False):
