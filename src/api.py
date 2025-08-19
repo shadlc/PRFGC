@@ -21,7 +21,7 @@ def get(robot: "Concerto", url):
     try:
         get_url = robot.config.api_base + url
         robot.request_list.append(f"GET{url}")
-        r = requests.get(get_url, timeout=5000)
+        r = requests.get(get_url, timeout=5)
         rev_json = r.json()
         if robot.config.is_debug:
             robot.printf(f"{Fore.YELLOW}[DATA]{Fore.RESET} GET请求{Fore.MAGENTA}[{get_url}]{Fore.RESET}后返回{Fore.YELLOW}{r.json()}{Fore.RESET}")
@@ -41,7 +41,7 @@ def post(robot: "Concerto", url, data):
         get_url = robot.config.api_base + url
         robot.request_list.append(f"POST{url} | {data}")
         header = {"Content-Type": "application/json"}
-        r = requests.post(get_url, headers=header, data=data.encode("utf-8"), timeout=5000)
+        r = requests.post(get_url, headers=header, data=data.encode("utf-8"), timeout=5)
         rev_json = r.json()
         if robot.config.is_debug:
             robot.printf(f"{Fore.YELLOW}[DATA]{Fore.RESET} POST请求{Fore.MAGENTA}[{get_url}]{Fore.RESET}后返回{Fore.YELLOW}{r.json()}{Fore.RESET}")
@@ -90,10 +90,6 @@ def send_msg(robot: "Concerto", resp_dict):
         url = ""
         data = ""
     result = post(robot, url, data)
-    if status_ok(result):
-        robot.self_message.append(
-            get_msg(robot, {"message_id": result["data"]["message_id"]})["data"]
-        )
     return result
 
 def del_msg(robot: "Concerto", resp_dict):
@@ -132,9 +128,23 @@ def ocr_image(robot: "Concerto", resp_dict):
     url = "/.ocr_image?image=" + image
     return get(robot, url)
 
+def upload_private_file(robot: "Concerto", resp_dict):
+    user_id = resp_dict["user_id"]  # 用户ID
+    file = resp_dict["file"]  # 本地目录
+    name = resp_dict["name"]  # 文件名称
+    url = (
+        "/upload_private_file?group_id="
+        + str(user_id)
+        + "&file="
+        + file
+        + "&name="
+        + name
+    )
+    return get(robot, url)
+
 def upload_group_file(robot: "Concerto", resp_dict):
     group_id = resp_dict["group_id"]  # 群号
-    file = resp_dict["file"]  # 文件目录
+    file = resp_dict["file"]  # 本地目录
     name = resp_dict["name"]  # 文件名称
     url = (
         "/upload_group_file?group_id="
@@ -211,7 +221,7 @@ def get_friend_msg_history(robot: "Concerto", resp_dict):
     return post(robot, url, resp_dict)
 
 def get_recent_contact(robot: "Concerto", resp_dict):
-    """获取私聊历史记录"""
+    """获取最近消息列表"""
     url = "/get_recent_contact"
     return post(robot, url, resp_dict)
 
@@ -228,6 +238,11 @@ def set_msg_emoji_like(robot: "Concerto", resp_dict):
 def set_group_sign(robot: "Concerto", resp_dict):
     """群签到"""
     url = "/set_group_sign"
+    return post(robot, url, resp_dict)
+
+def send_like(robot: "Concerto", resp_dict):
+    """群签到"""
+    url = "/send_like"
     return post(robot, url, resp_dict)
 
 def set_group_special_title(robot: "Concerto", resp_dict):

@@ -39,11 +39,11 @@ class Message(Module):
     }
     CONV_CONFIG = None
 
-    @via(lambda self: self.at_or_private() and self.au(3) and self.match(r"^帮助\d$"))
+    @via(lambda self: self.at_or_private() and self.au(3) and self.match(r"^帮助\d?$"))
     def help(self):
         auth_level = self.auth
-        if self.match(r"帮助(\d)"):
-            auth_level = int(self.match(r"帮助(\d)").groups()[0])
+        if result := self.match(r"帮助(\d)"):
+            auth_level = max(auth_level, int(result.groups()[0]))
         help_list = []
         for mod in self.robot.modules.values():
             if mod.NAME is None or not isinstance(mod.HELP, dict):
@@ -238,7 +238,7 @@ class Message(Module):
         if self.match(r"^测试错误"):
             raise RuntimeError("测试错误")
         elif self.match(r"^测试(ip|IP)\s(\S*)"):
-            ip = self.match(r"^测试(ip|IP)\s(\S*)").groups()[0]
+            ip = self.match(r"^测试(ip|IP)\s(\S*)").groups()[1]
             headers = {
                 "Content-Type": "application/json;charset=UTF-8",
                 "token": self.config.get("ip_test_token",""),
@@ -246,6 +246,7 @@ class Message(Module):
             url = f"https://api.ip138.com/ip/?ip={ip}"
             msg = ""
             try:
+                self.printf(url, str(headers))
                 data = requests.post(url, headers=headers, timeout=5).json()
                 if data.get("ret") != "ok":
                     msg = f"ip138.com返回为空: {data.get("msg")}"

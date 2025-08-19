@@ -19,10 +19,10 @@ from src.utils import (
     Module,
     build_node,
     get_error,
+    get_stranger_info,
     get_user_name,
     send_forward_msg,
     status_ok,
-    stranger_info,
     via,
     read_msg,
 )
@@ -71,6 +71,7 @@ class Chat(Module):
     @via(lambda self: self.at_or_private() and self.au(2) and self.match(r"词云"), success=False)
     def wordcloud(self):
         """词云"""
+        date_pattern = "今天|今日|本日|这天|昨天|昨日|前天|前日|本周|这周|此周|这个?礼拜|这个?星期|上周|上个?礼拜|上个?星期|本月|这月|次月|这个月|上个?月|今年|本年|此年|这一?年|去年|上一?年"
         if self.match(r"(开启|启用|打开|记录|启动|关闭|禁用|取消)"):
             if self.auth <= 1:
                 self.wordcloud_switch()
@@ -80,7 +81,7 @@ class Chat(Module):
         elif self.match(r"(主题|颜色|色彩|方案|配色)"):
             self.wordcloud_colormap()
             return
-        elif result := self.match(r"(给|为)?([^\s].?)?(生成)?(今天|今日|本日|这天|昨天|昨日|前天|前日|本周|这周|此周|这个?礼拜|这个?星期|上周|上个?礼拜|上个?星期|本月|这月|次月|这个月|上个?月|今年|本年|此年|这一?年|去年|上一?年)?的?词云"):
+        elif result := self.match(rf"(给|为)?([^\s]*?)?(生成)?({date_pattern})?的?词云"):
             if self.config[self.owner_id]["wordcloud"]["enable"]:
                 gen_type = "all"
                 if self.match(r"(今天|今日|本日|这天)"):
@@ -112,14 +113,20 @@ class Chat(Module):
                     gen_type = "last_year"
                 else:
                     msg = "正在生成历史词云..."
+                text = ""
                 user_name = result.groups()[1]
                 user_id = None
                 if user_name:
                     user_id = self.get_uid(user_name)
-                    if not user_id:
+                    if not user_id and user_name not in self.robot.data.keys():
                         self.reply(f"未找到关于{user_name}的消息记录")
                         return
-                text = self.read_wordcloud(gen_type, self.owner_id, user_id)
+                    else:
+                        text = self.read_wordcloud(gen_type, user_name)
+                        self.printf(f"{user_name}词云共{len(text.split("\n"))}行")
+                else:
+                    text = self.read_wordcloud(gen_type, self.owner_id, user_id)
+                    self.printf(f"{self.owner_id}{f"内{user_id}的" if user_id else ""}词云共{len(text.split("\n"))}行")
                 if not text:
                     msg = "没有消息记录哦~"
                     self.reply(msg)
@@ -223,8 +230,8 @@ class Chat(Module):
             self.reply("什么也没有哦~")
 
     @via(lambda self: self.at_or_private() and self.au(2) and self.match(r"^\s*\[CQ:reply,id=([^\]]+?)\]\s*$"), success=False)
-    def sticker_to_img(self):
-        """表情转图片"""
+    def sticker_url(self):
+        """获取表情链接"""
         msg_id = self.match(r"^\s*\[CQ:reply,id=([^\]]+?)\]\s*$").groups()[0]
         reply_msg = read_msg(self.robot, msg_id)
         if status_ok(reply_msg) and re.match(r"^\s*\[CQ:image,([^\]]+?)\]\s*$", reply_msg["data"]["message"]):
@@ -245,7 +252,7 @@ class Chat(Module):
         label = inputs[-1]
         msg = "好像没有找到这个用户欸~"
         if name.isdigit():
-            info = stranger_info(self.robot, name)
+            info = get_stranger_info(self.robot, name)
             if status_ok(info):
                 nickname = info["data"]["nickname"]
                 msg = f"我记住了，{nickname}人送外号: {label}！"
@@ -284,7 +291,7 @@ class Chat(Module):
     @via(lambda self: self.config[self.owner_id]["wordcloud"]["enable"], success=False)
     def z_record_msg(self):
         """聊天消息记录"""
-        msg = re.sub(r"((\[|【|{).*(\]|】|}))", "", self.event.msg)
+        msg = re.sub(r"(\[|【|{)[\s\S]*(\]|】|})", "", self.event.msg)
         msg = re.sub(r"http[s]?://\S+", "", msg)
         self.store_wordcloud(
             self.owner_id,

@@ -19,14 +19,10 @@ from PIL import Image
 from colorama import Fore
 
 from src.config import Config
-from src.api import (
-    friend_poke, get_forward_msg, get_group_info, get_group_member_info, get_image, get_msg,
-    get_stranger_info, group_poke, handle_quick_operation, post,
-    send_msg, set_msg_emoji_like, set_group_sign, set_group_special_title
-)
+from src import api
 
 if TYPE_CHECKING:
-    from robot import Concerto
+    from src.robot import Concerto
 
 def listening(host: str, port: int) -> list[dict|str]:
     """监听指定地址与端口"""
@@ -41,7 +37,9 @@ def listening(host: str, port: int) -> list[dict|str]:
         response += data
         if len(data) < 1024 or data[-1] == 10:
             break
-    client.sendall("HTTP/1.1 200 OK\r\n\r\n".encode(encoding="utf-8"))
+    client.setblocking(False)
+    client.sendall(b"HTTP/1.1 200 OK\r\n\r\n")
+    client.close()
     server.close()
     header_str, body_str = response.decode(encoding="utf-8").split("\r\n\r\n", maxsplit=1)
     lines = header_str.strip().splitlines()
@@ -305,14 +303,14 @@ def reply_event(robot: "Concerto", event: "Event", msg: str, reply=False, force=
             robot.printf(
                 f"{Fore.GREEN}[SEND] {Fore.RESET}向群{Fore.MAGENTA}{group_name}({group_id}){Fore.RESET}发送消息：{simple_msg}"
             )
-            return send_msg(robot, {"msg_type": "group", "number": group_id, "msg": msg})
+            return api.send_msg(robot, {"msg_type": "group", "number": group_id, "msg": msg})
         else:
             user_id = event.user_id
             user_name = get_user_name(robot, user_id)
             robot.printf(
                 f"{Fore.GREEN}[SEND] {Fore.RESET}向{Fore.MAGENTA}{user_name}({user_id}){Fore.RESET}发送消息：{simple_msg}"
             )
-            return send_msg(robot, {"msg_type": "private", "number": user_id, "msg": msg})
+            return api.send_msg(robot, {"msg_type": "private", "number": user_id, "msg": msg})
 
 def reply_id(robot: "Concerto", msg_type: str, uid: str, msg: str, force=False):
     """
@@ -330,12 +328,12 @@ def reply_id(robot: "Concerto", msg_type: str, uid: str, msg: str, force=False):
             robot.printf(
                 f"{Fore.GREEN}[SEND]{Fore.RESET}向群{Fore.MAGENTA}{get_group_name(robot, uid)}({uid}){Fore.RESET}发送消息：{simple_msg}"
             )
-            return send_msg(robot, {"msg_type": "group", "number": uid, "msg": msg})
+            return api.send_msg(robot, {"msg_type": "group", "number": uid, "msg": msg})
         else:
             robot.printf(
                 f"{Fore.GREEN}[SEND]{Fore.RESET}向{Fore.MAGENTA}{get_user_name(robot, uid)}({uid}){Fore.RESET}发送消息：{simple_msg}"
             )
-            return send_msg(robot, {"msg_type": "private", "number": uid, "msg": msg})
+            return api.send_msg(robot, {"msg_type": "private", "number": uid, "msg": msg})
 
 def reply_back(robot: "Concerto", owner_id: str, msg: str):
     """
@@ -368,7 +366,23 @@ def quick_reply(robot: "Concerto", raw: dict, msg: str):
                 "time": time.time(),
             }
         )
-        return handle_quick_operation(robot, {"context": raw, "operation": {"reply": msg}})
+        return api.handle_quick_operation(robot, {"context": raw, "operation": {"reply": msg}})
+
+def send_msg(robot: "Concerto", msg_type: str, number: str, msg: str, group_id: str=None):
+    """
+    发送消息
+    :param robot: 机器人类
+    :param msg_type: 消息类型
+    :param number: 对方ID
+    :param msg: 消息内容
+    :return: 消息内容
+    """
+    result = api.send_msg(robot, {"msg_type": msg_type, "number": number, "msg": msg})
+    if status_ok(result):
+        robot.self_message.append(
+            api.get_msg(robot, {"message_id": result["data"]["message_id"]})["data"]
+        )
+    return result
 
 def read_msg(robot: "Concerto", msg_id: str):
     """
@@ -377,7 +391,15 @@ def read_msg(robot: "Concerto", msg_id: str):
     :param msg_id: 消息ID
     :return: 消息内容
     """
-    return get_msg(robot, {"message_id": msg_id})
+    return api.get_msg(robot, {"message_id": msg_id})
+
+def del_msg(robot: "Concerto", msg_id: str):
+    """
+    撤回消息
+    :param robot: 机器人类
+    :param msg_id: 消息ID
+    """
+    return api.del_msg(robot, {"message_id": msg_id})
 
 def read_forward_msg(robot: "Concerto", msg_id: str):
     """
@@ -388,7 +410,7 @@ def read_forward_msg(robot: "Concerto", msg_id: str):
     """
     if msg_id == 0:
         return None
-    result = get_forward_msg(robot, {"message_id": msg_id})
+    result = api.get_forward_msg(robot, {"message_id": msg_id})
     if "data" in result and result["data"]:
         return result["data"]["messages"]
     else:
@@ -410,7 +432,7 @@ def send_forward_msg(robot: "Concerto", nodes: dict, group_id=None, user_id=None
         data = {"user_id": user_id, "messages": nodes}
     else:
         return
-    result = post(robot, "/send_forward_msg", data)
+    result = api.post(robot, "/send_forward_msg", data)
     if status_ok(result):
         robot.self_message.append(
             read_msg(robot, result["data"]["message_id"])["data"]
@@ -426,7 +448,7 @@ def send_private_forward_msg(robot: "Concerto", node: dict, user_id: str):
     :return: 发送消息后返回的json信息
     """
     data = {"user_id": user_id, "messages": node}
-    result = post(robot, "/send_private_forward_msg", data)
+    result = api.post(robot, "/send_private_forward_msg", data)
     if status_ok(result):
         robot.self_message.append(
             read_msg(robot, result["data"]["message_id"])["data"]
@@ -442,12 +464,21 @@ def send_group_forward_msg(robot: "Concerto", node: dict, group_id: str):
     :return: 发送消息后返回的json信息
     """
     data = {"group_id": group_id, "messages": node}
-    result = post(robot, "/send_group_forward_msg", data)
+    result = api.post(robot, "/send_group_forward_msg", data)
     if status_ok(result):
         robot.self_message.append(
             read_msg(robot, result["data"]["message_id"])["data"]
         )
     return result
+
+def get_group_msg_history(robot: "Concerto", msg_id: str):
+    """
+    获取群消息历史
+    :param robot: 机器人类
+    :param msg_id: 消息ID
+    :return: 消息json信息
+    """
+    return get_group_msg_history(robot, {"group_id": msg_id})
 
 def reply_add(robot: "Concerto", raw: dict, accept: str, msg: str):
     """
@@ -459,7 +490,7 @@ def reply_add(robot: "Concerto", raw: dict, accept: str, msg: str):
     :return: 发送消息后返回的json信息
     """
     if raw["post_type"] == "request":
-        return handle_quick_operation(robot,
+        return api.handle_quick_operation(robot,
             {
                 "context": raw,
                 "operation": {"approve": accept, "remark": msg, "reason": msg},
@@ -479,16 +510,25 @@ def get_user_name(robot: "Concerto", uid: str):
     if uid in robot.user_dict:
         return robot.user_dict[uid]
     else:
-        result = get_stranger_info(robot, {"user_id": uid})
+        result = api.get_stranger_info(robot, {"user_id": uid})
         if status_ok(result):
             name = result["data"]["nickname"]
             robot.user_dict[uid] = name
             return name
         return ""
 
-def get_group_name(robot: "Concerto", group_id: str):
+def get_group_info(robot: "Concerto", group_id: str):
     """
     获取群信息
+    :param robot: 机器人类
+    :param id: 群号
+    :return: 群信息
+    """
+    return api.get_group_info(robot, {"group_id": group_id})
+
+def get_group_name(robot: "Concerto", group_id: str):
+    """
+    获取群名称
     :param robot: 机器人类
     :param id: 群号
     :return: 群信息
@@ -499,7 +539,7 @@ def get_group_name(robot: "Concerto", group_id: str):
     if group_id in robot.group_dict:
         return robot.group_dict[group_id]
     else:
-        result = get_group_info(robot, {"group_id": group_id})
+        result = get_group_info(robot, group_id)
         if status_ok(result):
             name = result["data"]["group_name"]
             robot.group_dict[group_id] = name
@@ -514,9 +554,9 @@ def get_image_url(robot: "Concerto", file: str):
     :param file: 文件的标识码
     :return: 文件下载链接
     """
-    result = post(robot, "/get_image_url", file)
+    result = api.post(robot, "/get_image_url", file)
     if status_ok(result):
-        return get_image(robot, {"file": file})
+        return api.get_image(robot, {"file": file})
     else:
         return False
 
@@ -529,9 +569,18 @@ def poke(robot: "Concerto", user_id: str, group_id=""):
     """
     resp_dict = {"user_id": user_id, "group_id": group_id}
     if group_id:
-        group_poke(robot, resp_dict)
+        return api.group_poke(robot, resp_dict)
     else:
-        friend_poke(robot, resp_dict)
+        return api.friend_poke(robot, resp_dict)
+
+def set_model_show(robot: "Concerto", device: str, model_show: str):
+    """
+    贴表情
+    :param robot: 机器人类
+    :param device: 设备名
+    :param model_show: 展示名称
+    """
+    return api.set_model_show(robot, {"model": device, "model_show": model_show})
 
 def set_emoji(robot: "Concerto", message_id: str, emoji_id: str, is_set=True):
     """
@@ -541,7 +590,7 @@ def set_emoji(robot: "Concerto", message_id: str, emoji_id: str, is_set=True):
     :param set: 贴上/取下
     """
     resp_dict = {"message_id": message_id, "emoji_id": emoji_id, "set": is_set}
-    return set_msg_emoji_like(robot, resp_dict)
+    return api.set_msg_emoji_like(robot, resp_dict)
 
 def group_sign(robot: "Concerto", group_id: str):
     """
@@ -550,7 +599,26 @@ def group_sign(robot: "Concerto", group_id: str):
     :param group_id: 群ID
     """
     resp_dict = {"group_id": group_id}
-    return set_group_sign(robot, resp_dict)
+    return api.set_group_sign(robot, resp_dict)
+
+def send_group_notice(robot: "Concerto", group_id: str, notice: str):
+    """
+    发送群公告
+    :param robot: 机器人类
+    :param group_id: 群ID
+    :param notice: 群公告内容
+    """
+    return api.send_group_notice(robot, {"group_id": group_id, "content": notice})
+
+def send_like(robot: "Concerto", user_id: str, times: int):
+    """
+    贴表情
+    :param robot: 机器人类
+    :param user_id: 用户ID
+    :param times: 次数
+    """
+    resp_dict = {"user_id": user_id, "times": times}
+    return api.send_like(robot, resp_dict)
 
 def group_member_info(robot: "Concerto", group_id: str, user_id: str):
     """
@@ -560,7 +628,7 @@ def group_member_info(robot: "Concerto", group_id: str, user_id: str):
     :param user_id: 用户ID
     """
     resp_dict = {"group_id": group_id, "user_id": user_id}
-    return get_group_member_info(robot, resp_dict)
+    return api.get_group_member_info(robot, resp_dict)
 
 def group_special_title(robot: "Concerto", group_id: str, user_id: str, special_title: str):
     """
@@ -569,16 +637,24 @@ def group_special_title(robot: "Concerto", group_id: str, user_id: str, special_
     :param group_id: 群ID
     """
     resp_dict = {"group_id": group_id, "user_id": user_id, "special_title": special_title}
-    return set_group_special_title(robot, resp_dict)
+    return api.set_group_special_title(robot, resp_dict)
 
-def stranger_info(robot: "Concerto", user_id: int):
+def get_stranger_info(robot: "Concerto", user_id: int):
     """
     获取用户信息
     :param robot: 机器人类
     :param group_id: 群ID
     """
     resp_dict = {"user_id": user_id}
-    return get_stranger_info(robot, resp_dict)
+    return api.get_stranger_info(robot, resp_dict)
+
+def ocr_image(robot: "Concerto", img_id: str):
+    """
+    OCR图片识别
+    :param robot: 机器人类
+    :param img_id: 消息ID
+    """
+    return ocr_image(robot, {"image": img_id})
 
 def simplify_traceback(tb: str):
     """
@@ -794,7 +870,9 @@ class Module:
 
     def reply(self, msg, reply=False, force=False):
         """快捷回复消息"""
-        reply_event(self.robot, self.event, msg, reply=reply, force=force)
+        if self.robot.config.is_always_reply:
+            reply = True
+        return reply_event(self.robot, self.event, msg, reply=reply, force=force)
 
     def printf(self, msg, end="\n", console=True, flush=False):
         """

@@ -5,7 +5,7 @@ import time
 
 from colorama import Fore
 
-from src.utils import Module, calc_size, poke, reply_id, via, get_user_name
+from src.utils import Module, calc_size, poke, reply_event, reply_id, via, get_user_name
 
 
 class Notice(Module):
@@ -18,9 +18,11 @@ class Notice(Module):
     GLOBAL_CONFIG = None
     CONV_CONFIG = None
 
-    @via(lambda self: self.event.notice_type == "notify"
+    @via(
+        lambda self: self.event.notice_type == "notify"
         and self.event.sub_type == "poke"
-        and not self.is_self_send())
+        and not self.is_self_send()
+    )
     def poke(self):
         if self.event.group_id and self.event.group_id in self.robot.config.rev_group:
             self.printf(
@@ -44,14 +46,18 @@ class Notice(Module):
             )
             poke(self.robot, self.event.user_id)
             if random.choice(range(5)) == 0:
-                reply_id(self.robot, "private", self.event.user_id, "%BE_POKED%")
+                reply_event(self.robot, self.event, "%BE_POKED%")
 
-    @via(lambda self: self.event.notice_type == "notify"
+    @via(
+        lambda self: self.event.notice_type == "notify"
         and self.event.sub_type == "input_status"
-        and self.event.raw.get("status_text"))
+        and self.event.raw.get("status_text")
+    )
     def typing(self):
         if status_text := self.event.raw.get("status_text"):
-            self.printf(f"{Fore.MAGENTA}{self.event.user_name}({self.event.user_id}){Fore.RESET}{status_text}")
+            self.printf(
+                f"{Fore.MAGENTA}{self.event.user_name}({self.event.user_id}){Fore.RESET}{status_text}"
+            )
 
     @via(lambda self: self.event.notice_type == "client_status")
     def client_status(self):
@@ -76,7 +82,7 @@ class Notice(Module):
             f"{Fore.MAGENTA}{self.event.operator_name}({self.event.operator_id})撤回了一条消息"
         )
         msg = "%OTHER_RECALL%"
-        reply_id(self.robot, "private", self.event.user_id, msg)
+        reply_event(self.robot, self.event, msg)
 
     @via(lambda self: self.event.notice_type == "group_recall")
     def group_recall(self):
@@ -86,28 +92,22 @@ class Notice(Module):
         recall_time = time.strftime(
             "%Y年%m月%d日%H:%M:%S", time.localtime(self.event.time)
         )
-        recall_message = None
         if self.event.group_id not in self.robot.config.rev_group:
             return
         if (
             self.event.user_id == self.robot.self_id
             and self.event.operator_id != self.robot.self_id
-            and self.event.operator_id not in self.robot.admin_id
+            and self.event.operator_id not in self.robot.config.admin_list
             and random.choice(1)
         ):
             msg = f"{self.event.operator_name}在{recall_time}将%ROBOT_NAME%的消息撤回，%ROBOT_NAME%很难过"
-            reply_id(self.robot, "group", self.event.group_id, msg)
+            reply_event(self.robot, self.event, msg)
         elif self.event.user_id != self.robot.self_id:
             for message in self.data.past_message:
                 if self.event.msg_id == message.get("message_id"):
                     if not self.robot.data.get("latest_recall"):
                         self.robot.data["latest_recall"] = {}
                     self.robot.data["latest_recall"][self.owner_id] = message
-            # if recall_message is not None:
-            #     msg = f"%OTHER_RECALL%\n{self.event.operator_name}在{recall_time}试图将{self.event.user_name}的一条消息“{recall_message}”撤回，%ROBOT_NAME%还记得"
-            # else:
-            #     msg = f"{self.event.operator_name}在{recall_time}将{self.event.user_name}的一条消息撤回，但是%ROBOT_NAME%记不得了..."
-            # reply_id(self.robot, "group", self.event.group_id, msg)
 
     @via(lambda self: self.event.notice_type == "group_upload")
     def group_upload(self):
@@ -139,7 +139,7 @@ class Notice(Module):
                 f"{Fore.MAGENTA}{self.event.user_name}({self.event.user_id}){Fore.RESET}被踢出群{Fore.MAGENTA}{self.event.group_name}({self.event.group_id}){Fore.RESET}"
             )
         elif self.event.sub_type == "disband":
-            operator_name = get_user_name(self.event.operator_id)
+            operator_name = get_user_name(self.robot, self.event.operator_id)
             self.printf(
                 f"{Fore.MAGENTA}{operator_name}({self.event.operator_id}){Fore.RESET}已将群{Fore.MAGENTA}{self.event.group_name}({self.event.group_id}){Fore.RESET}解散"
             )
@@ -157,10 +157,10 @@ class Notice(Module):
 
         if self.event.user_id == self.robot.self_id:
             msg = "%SELF_INTRODUCTION%"
-            reply_id(self.robot, "group", self.event.group_id, msg)
+            reply_event(self.robot, self.event, msg)
         elif self.event.group_id in self.robot.config.rev_group:
             msg = self.event.user_name + "%WELCOME_NEWBIE%"
-            reply_id(self.robot, "group", self.event.group_id, msg)
+            reply_event(self.robot, self.event, msg)
 
     @via(lambda self: self.event.notice_type == "group_ban")
     def group_ban(self):
@@ -186,7 +186,10 @@ class Notice(Module):
                     f"{Fore.YELLOW}[{self.ID}]{Fore.RESET}群{Fore.MAGENTA}{self.event.group_name}({self.event.group_id}){Fore.RESET}内{Fore.MAGENTA}{self.event.operator_name}({self.event.operator_id}){Fore.RESET}解除了{Fore.MAGENTA}{self.event.user_name}({self.event.user_id}){Fore.RESET}的禁言"
                 )
 
-    @via(lambda self: self.event.notice_type == "notify" and self.event.sub_type == "profile_like")
+    @via(
+        lambda self: self.event.notice_type == "notify"
+        and self.event.sub_type == "profile_like"
+    )
     def profile_like(self):
         times = self.event.raw.get("times")
         self.printf(

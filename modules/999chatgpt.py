@@ -8,8 +8,8 @@ from src.utils import Module, via
 class ChatGPT(Module):
     """基础消息处理模块"""
 
-    ID = "ChatGPT"
-    NAME = "ChatGPT模块"
+    # ID = "ChatGPT"
+    # NAME = "ChatGPT模块"
     HELP = {
         3: [
             "以#开头或者直接@我发送消息就能和我聊天啦~",
