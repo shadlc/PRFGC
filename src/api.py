@@ -111,6 +111,9 @@ def send_group_notice(robot: "Concerto", resp_dict):
     url = "/_send_group_notice?group_id=" + str(group_id) + "&content=" + content
     return get(robot, url)
 
+def send_group_ai_record(robot: "Concerto", resp_dict):
+    return post(robot, "/send_group_ai_record", resp_dict)
+
 def get_image(robot: "Concerto", resp_dict):
     file = resp_dict["file"]  # 图片缓存文件名
     url = "/get_image?file=" + str(file)
@@ -180,16 +183,21 @@ def get_group_info(robot: "Concerto", resp_dict):
     url = "/get_group_info?group_id=" + str(group_id)
     return get(robot, url)
 
-def get_model_show(robot: "Concerto", resp_dict):
-    model = resp_dict["model"]  # 机型
-    url = "/_set_model_show?model=" + model
-    return get(robot, url)
+def set_group_ban(robot: "Concerto", resp_dict):
+    url = "/set_group_ban"
+    return post(robot, url, resp_dict)
+
+def set_group_whole_ban(robot: "Concerto", resp_dict):
+    url = "/set_group_whole_ban"
+    return post(robot, url, resp_dict)
+
+def set_group_kick(robot: "Concerto", resp_dict):
+    url = "/set_group_kick"
+    return post(robot, url, resp_dict)
 
 def set_model_show(robot: "Concerto", resp_dict):
-    model = resp_dict["model"]  # 机型
-    model_show = resp_dict["model_show"]  # 机型后缀
-    url = "/_set_model_show?model=" + model + "&model_show=" + model_show
-    return get(robot, url)
+    url = "/_set_model_show"
+    return post(robot, url, resp_dict)
 
 def get_version_info(robot: "Concerto"):
     result = get(robot, "/get_version_info")

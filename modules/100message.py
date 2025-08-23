@@ -53,6 +53,8 @@ class Message(Module):
                 if auth_level <= i:
                     for text in mod.HELP.get(i, []):
                         help_text += f"{text}\n"
+                        if i == 0:
+                            help_text += "\n"
             if help_text:
                 help_text = f"{mod.NAME}帮助\n\n{help_text}"
                 help_list.append(build_node(help_text.strip()))

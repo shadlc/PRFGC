@@ -24,6 +24,7 @@ class Config:
             "blacklist": [],
             "is_debug": False,
             "is_silence": False,
+            "is_show_heartbeat": False,
             "is_always_reply": False,
             "is_show_all_msg": False,
             "is_show_image": False,
@@ -44,6 +45,7 @@ class Config:
         self.blacklist = self.raw.get("blacklist", self.default["blacklist"])
         self.is_debug = self.raw.get("is_debug", self.default["is_debug"])
         self.is_silence = self.raw.get("is_silence", self.default["is_silence"])
+        self.is_show_heartbeat = self.raw.get("is_show_heartbeat", self.default["is_show_heartbeat"])
         self.is_always_reply = self.raw.get("is_always_reply", self.default["is_always_reply"])
         self.is_show_all_msg = self.raw.get("is_show_all_msg", self.default["is_show_all_msg"])
         self.is_show_image = self.raw.get("is_show_image", self.default["is_show_image"])

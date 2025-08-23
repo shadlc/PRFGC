@@ -24,7 +24,7 @@ from src.utils import (
     send_forward_msg,
     status_ok,
     via,
-    read_msg,
+    get_msg,
 )
 
 class Chat(Module):
@@ -81,7 +81,7 @@ class Chat(Module):
         elif self.match(r"(主题|颜色|色彩|方案|配色)"):
             self.wordcloud_colormap()
             return
-        elif result := self.match(rf"(给|为)?([^\s]*?)?(生成)?({date_pattern})?的?词云"):
+        elif result := self.match(rf"(给|为)?([^\s]*?)?\s?(生成|的)?({date_pattern})?的?词云"):
             if self.config[self.owner_id]["wordcloud"]["enable"]:
                 gen_type = "all"
                 if self.match(r"(今天|今日|本日|这天)"):
@@ -121,18 +121,27 @@ class Chat(Module):
                     if not user_id and user_name not in self.robot.data.keys():
                         self.reply(f"未找到关于{user_name}的消息记录")
                         return
-                    else:
+                    elif user_name in self.robot.data.keys():
                         text = self.read_wordcloud(gen_type, user_name)
-                        self.printf(f"{user_name}词云共{len(text.split("\n"))}行")
+                        msg = msg.replace("正在生成", f"正在生成{user_name}内的")
+                        msg += f"共{len(text.split("\n"))}条..."
+                        self.printf(f"{user_name}词云共{len(text.split("\n"))}条")
+                    else:
+                        text = self.read_wordcloud(gen_type, self.owner_id, user_id)
+                        user_name = get_user_name(self.robot, user_id)
+                        msg = msg.replace("正在生成", f"正在生成{user_name}的")
+                        msg += f"共{len(text.split("\n"))}条..."
+                        self.printf(f"{self.owner_id}{f"内{user_id}的" if user_id else ""}词云共{len(text.split("\n"))}条")
                 else:
                     text = self.read_wordcloud(gen_type, self.owner_id, user_id)
-                    self.printf(f"{self.owner_id}{f"内{user_id}的" if user_id else ""}词云共{len(text.split("\n"))}行")
+                    msg += f"共{len(text.split("\n"))}条..."
+                    self.printf(f"{self.owner_id}{f"内{user_id}的" if user_id else ""}词云共{len(text.split("\n"))}条")
                 if not text:
                     msg = "没有消息记录哦~"
-                    self.reply(msg)
+                    self.reply(msg, reply=True)
                     return
                 msg += "请耐心等待..."
-                self.reply(msg)
+                self.reply(msg, reply=True)
                 try:
                     url = self.generate_wordcloud(text)
                     msg = f"[CQ:image,file={url}]"
@@ -146,7 +155,7 @@ class Chat(Module):
         else:
             return
         self.success = True
-        self.reply(msg)
+        self.reply(msg, reply=True)
 
     @via(lambda self: self.at_or_private() and self.au(2) and self.match(r"^(开启|启用|打开|记录|启动|关闭|禁用|取消)?复读(统计|记录|排行)$"))
     def repeat(self):
@@ -183,12 +192,12 @@ class Chat(Module):
                     gen_type = "all"
                 data = self.get_repeat_record(gen_type)
                 if not data or data == [[]]:
-                    self.reply("没有复读记录哦~")
-                    return
-                msg = self.format_repeat_record(data, gen_type)
+                    msg = "没有复读记录哦~"
+                else:
+                    msg = self.format_repeat_record(data, gen_type)
             else:
                 msg = "请先开启复读记录哦~"
-        self.reply(msg)
+        self.reply(msg, reply=True)
 
     @via(lambda self: self.at_or_private() and self.au(2) and self.match(r"^\s*(\s?(\S+)(说|言)(道|过)?(:|：)(\S+)\s?)+\s*$"))
     def once_said(self):
@@ -233,7 +242,7 @@ class Chat(Module):
     def sticker_url(self):
         """获取表情链接"""
         msg_id = self.match(r"^\s*\[CQ:reply,id=([^\]]+?)\]\s*$").groups()[0]
-        reply_msg = read_msg(self.robot, msg_id)
+        reply_msg = get_msg(self.robot, msg_id)
         if status_ok(reply_msg) and re.match(r"^\s*\[CQ:image,([^\]]+?)\]\s*$", reply_msg["data"]["message"]):
             file, url = re.match(r"^\s*\[CQ:image,.*file=([^,\]]+?),.*url=([^,\]]+?),.*\]\s*$", reply_msg["data"]["message"]).groups()
             msg = f"{url}"
@@ -327,6 +336,8 @@ class Chat(Module):
         for uid, user in config["users"].items():
             if name in (user["nickname"], user["label"]):
                 return uid
+        if re.search(r"^(我|吾|俺|朕|孤)$", name):
+            return self.event.user_id
         if name.isdigit():
             return name
         return 0

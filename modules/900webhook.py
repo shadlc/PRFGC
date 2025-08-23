@@ -20,6 +20,9 @@ class Webhook(Module):
     ID = "Webhook"
     NAME = "外部请求模块处理"
     HELP = {
+        0: [
+            "本模块须在后台进行配置，仅作监听通知使用",
+        ],
         1: [
             "开启/关闭 | 开启或关闭外部请求通知",
         ],
@@ -34,6 +37,7 @@ class Webhook(Module):
     }
     CONV_CONFIG = None
     AUTO_INIT = True
+
     def __init__(self, event, auth=0):
         super().__init__(event, auth)
         if hasattr(self.robot, "webhook"):

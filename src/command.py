@@ -21,10 +21,10 @@ from src.utils import (
     send_like,
     set_model_show,
     status_ok,
+    get_forward_msg,
     get_stranger_info,
     get_group_info,
     send_msg,
-    read_forward_msg,
     quick_reply,
     set_emoji,
     group_sign,
@@ -76,6 +76,7 @@ class ExecuteCmd(object):
             "qreply": "快捷回复上一条消息(不支持快捷撤回)",
             "say": "向主对接群发送消息",
             "set": "设置变量",
+            "sign": "进行群打卡",
             "silence": "静默模式",
             "stop": "关闭程序",
             "test": "测试接口",
@@ -572,7 +573,7 @@ class ExecuteCmd(object):
     def read(self, argv=""):
         if re.search(r"(.+)", argv):
             msg_id = re.search(r"(.+)", argv).groups()[0]
-            msg_list = read_forward_msg(self.robot, msg_id)
+            msg_list = get_forward_msg(self.robot, msg_id)
             if msg_list:
                 group = 0
                 for msg in msg_list:
@@ -748,8 +749,8 @@ class ExecuteCmd(object):
                 self.warnf(f"GET发送请求出错，返回为{Fore.YELLOW}{result}{Fore.RESET}")
         elif re.search(r"(post|POST)\s+(\S+)\s+(.+)", argv):
             temp = re.search(r"(post|POST)\s+(\S+)\s+(.+)", argv).groups()[1:]
-            url = temp[1]
-            data = temp[2]
+            url = temp[0]
+            data = temp[1]
             result = post(self.robot, url, json.loads(data))
             if status_ok(result):
                 self.printf(
@@ -823,6 +824,18 @@ class ExecuteCmd(object):
                 self.printf(
                     f"请使用 {Fore.CYAN}set show all/brief{Fore.RESET} 设置显示信息类别"
                 )
+        elif re.search(r"heartbeat", argv):
+            if re.search(r"(true|True)", argv):
+                self.robot.config.is_show_heartbeat = True
+            elif re.search(r"(false|False)", argv):
+                self.robot.config.is_show_heartbeat = False
+            else:
+                self.robot.config.is_show_heartbeat = not self.robot.config.is_show_heartbeat
+            self.robot.config.save("is_show_heartbeat", self.robot.config.is_show_heartbeat)
+            if self.robot.config.is_show_heartbeat:
+                self.warnf("心跳包接收显示已开启")
+            else:
+                self.warnf("心跳包接收显示已关闭")
         elif re.search(r"reply", argv):
             if re.search(r"(true|True)", argv):
                 self.robot.config.is_always_reply = True
@@ -915,23 +928,14 @@ class ExecuteCmd(object):
                 self.warnf("图片字符画显示已关闭")
         else:
             self.printf("==========设置列表==========")
-            self.printf(
-                f"{Fore.CYAN}set self QQ号/auto{Fore.RESET} 设置机器人QQ号(用于辨别@信息)"
-            )
+            self.printf(f"{Fore.CYAN}set self QQ号/auto{Fore.RESET} 设置机器人QQ号(用于辨别@信息)")
             self.printf(f"{Fore.CYAN}set show all/brief{Fore.RESET} 设置显示信息类别")
-            self.printf(
-                f"{Fore.CYAN}set image (true/false){Fore.RESET} 设置图片字符画显示"
-            )
+            self.printf(f"{Fore.CYAN}set image (true/false){Fore.RESET} 设置图片字符画显示")
             self.printf(f"{Fore.CYAN}set image color {Fore.RESET} 设置彩色图片显示")
-            self.printf(
-                f"{Fore.CYAN}set image minsize/maxsize 数字{Fore.RESET} 设置图片字符画最小/最大宽度"
-            )
-            self.printf(
-                f"{Fore.CYAN}set image size 数字 数字{Fore.RESET} 设置图片字符画最小/最大宽度"
-            )
-            self.printf(
-                f"{Fore.CYAN}set reply (true/false){Fore.RESET} 设置回复消息是否强制引用原文"
-            )
+            self.printf(f"{Fore.CYAN}set image minsize/maxsize 数字{Fore.RESET} 设置图片字符画最小/最大宽度")
+            self.printf(f"{Fore.CYAN}set image size 数字 数字{Fore.RESET} 设置图片字符画最小/最大宽度")
+            self.printf(f"{Fore.CYAN}set heartbeat (true/false){Fore.RESET} 设置接收心跳包是否显示")
+            self.printf(f"{Fore.CYAN}set reply (true/false){Fore.RESET} 设置回复消息是否强制引用原文")
 
     def silence(self, argv=""):
         self.robot.config.is_silence = not self.robot.config.is_silence

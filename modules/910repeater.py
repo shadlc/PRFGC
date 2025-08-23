@@ -13,7 +13,7 @@ class Repeater(Module):
     ID = "Repeater"
     NAME = "复读机模块"
     HELP = {
-        2: [
+        0: [
             "顾名思义，会以一定概率复读重复说过的话，短时间不会重复复读",
         ],
         1: [

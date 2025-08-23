@@ -14,7 +14,7 @@ from colorama import Fore
 
 from src.config import Config
 from src.utils import (
-    Event, Module, handle_placeholder, import_json, msg_img2char, reply_event, scan_missing_modules, simplify_traceback, receive_msg
+    Event, Module, handle_placeholder, import_json, msg_img2char, reply_event, scan_missing_modules, simplify_traceback, receive_msg, send_msg
 )
 from src.command import ExecuteCmd
 
@@ -186,10 +186,15 @@ class Concerto:
                 if event.group_id != "" and event.group_id not in self.config.rev_group:
                     return
                 if self.config.is_debug:
-                    reply_event(self, event, f"%FATAL_ERROR%\n{traceback.format_exc()}")
+                    if len(self.config.admin_list):
+                        send_msg(self, "private", self.config.admin_list[0], f"%FATAL_ERROR%\n{traceback.format_exc()}")
+                    else:
+                        reply_event(self, event, f"%FATAL_ERROR%\n{traceback.format_exc()}")
                 else:
-                    reply_event(self, event, f"%FATAL_ERROR%\n{simplify_traceback(traceback.format_exc())}")
-
+                    if len(self.config.admin_list):
+                        send_msg(self, "private", self.config.admin_list[0], f"%FATAL_ERROR%\n{simplify_traceback(traceback.format_exc())}")
+                    else:
+                        reply_event(self, event, f"%FATAL_ERROR%\n{simplify_traceback(traceback.format_exc())}")
         threading.Thread(target=execute_msg, args=[event, auth], daemon=True).start()
 
     def message_sent(self, event: Event):
@@ -280,7 +285,7 @@ class Concerto:
                             if hasattr(obj, "AUTO_INIT") and obj.AUTO_INIT:
                                 obj(Event(self))
                     if not is_module:
-                        self.errorf(f"文件[{item}]内没有有效的模块, 加载失败!")
+                        self.warnf(f"文件[{item}]内没有有效的模块, 已取消加载!")
         import_classes("modules")
 
     def module_enable(self, module: Module, module_file: str):
@@ -303,7 +308,7 @@ class Concerto:
         :param text: 输入文本
         """
         text = re.sub(r"\x1B\[[0-?]*[ -/]*[@-~]", "", text)
-        text = re.sub(r"(█+\s*)+", "[图片]", text)
+        text = re.sub(r"(\s?█+\s*)+", "[图片]", text)
         return text.strip()
 
     def printf(self, msg, end="\n", console=True, flush=False):

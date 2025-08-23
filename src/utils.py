@@ -293,9 +293,7 @@ def reply_event(robot: "Concerto", event: "Event", msg: str, reply=False, force=
     msg = handle_placeholder(str(msg), robot.placeholder_dict)
     if reply:
         msg = f"[CQ:reply,id={event.msg_id}]{msg}"
-    simple_msg = re.sub(
-        r"\[CQ:image,file=base64.*\]", r"[CQ:image,file=Base64Image]", msg
-    )
+    simple_msg = re.sub(r"\[CQ:(.*?),file=base64.*\]", r"[CQ:\1,file=Base64]", msg)
     if event.post_type == "message" and (not robot.config.is_silence or force):
         if event.msg_type == "group":
             group_id = event.group_id
@@ -303,14 +301,16 @@ def reply_event(robot: "Concerto", event: "Event", msg: str, reply=False, force=
             robot.printf(
                 f"{Fore.GREEN}[SEND] {Fore.RESET}向群{Fore.MAGENTA}{group_name}({group_id}){Fore.RESET}发送消息：{simple_msg}"
             )
-            return api.send_msg(robot, {"msg_type": "group", "number": group_id, "msg": msg})
+            resp_dict = {"msg_type": "group", "number": group_id, "msg": msg}
+            return api.send_msg(robot, resp_dict)
         else:
             user_id = event.user_id
             user_name = get_user_name(robot, user_id)
             robot.printf(
                 f"{Fore.GREEN}[SEND] {Fore.RESET}向{Fore.MAGENTA}{user_name}({user_id}){Fore.RESET}发送消息：{simple_msg}"
             )
-            return api.send_msg(robot, {"msg_type": "private", "number": user_id, "msg": msg})
+            resp_dict = {"msg_type": "private", "number": user_id, "msg": msg}
+            return api.send_msg(robot, resp_dict)
 
 def reply_id(robot: "Concerto", msg_type: str, uid: str, msg: str, force=False):
     """
@@ -322,18 +322,20 @@ def reply_id(robot: "Concerto", msg_type: str, uid: str, msg: str, force=False):
     :return: 发送消息后返回的json信息
     """
     msg = handle_placeholder(str(msg), robot.placeholder_dict)
-    simple_msg = re.sub(r"\[CQ:image,file=base64.*\]", "[CQ:image,file=Base64Image]", msg)
+    simple_msg = re.sub(r"\[CQ:(.*?),file=base64.*\]", r"[CQ:\1,file=Base64]", msg)
     if not robot.config.is_silence or force:
         if msg_type == "group":
             robot.printf(
-                f"{Fore.GREEN}[SEND]{Fore.RESET}向群{Fore.MAGENTA}{get_group_name(robot, uid)}({uid}){Fore.RESET}发送消息：{simple_msg}"
+                f"{Fore.GREEN}[SEND] {Fore.RESET}向群{Fore.MAGENTA}{get_group_name(robot, uid)}({uid}){Fore.RESET}发送消息：{simple_msg}"
             )
-            return api.send_msg(robot, {"msg_type": "group", "number": uid, "msg": msg})
+            resp_dict = {"msg_type": "group", "number": uid, "msg": msg}
+            return api.send_msg(robot, resp_dict)
         else:
             robot.printf(
-                f"{Fore.GREEN}[SEND]{Fore.RESET}向{Fore.MAGENTA}{get_user_name(robot, uid)}({uid}){Fore.RESET}发送消息：{simple_msg}"
+                f"{Fore.GREEN}[SEND] {Fore.RESET}向{Fore.MAGENTA}{get_user_name(robot, uid)}({uid}){Fore.RESET}发送消息：{simple_msg}"
             )
-            return api.send_msg(robot, {"msg_type": "private", "number": uid, "msg": msg})
+            resp_dict = {"msg_type": "private", "number": uid, "msg": msg}
+            return api.send_msg(robot, resp_dict)
 
 def reply_back(robot: "Concerto", owner_id: str, msg: str):
     """
@@ -366,7 +368,8 @@ def quick_reply(robot: "Concerto", raw: dict, msg: str):
                 "time": time.time(),
             }
         )
-        return api.handle_quick_operation(robot, {"context": raw, "operation": {"reply": msg}})
+        resp_dict = {"context": raw, "operation": {"reply": msg}}
+        return api.handle_quick_operation(robot, resp_dict)
 
 def send_msg(robot: "Concerto", msg_type: str, number: str, msg: str, group_id: str=None):
     """
@@ -377,21 +380,23 @@ def send_msg(robot: "Concerto", msg_type: str, number: str, msg: str, group_id: 
     :param msg: 消息内容
     :return: 消息内容
     """
-    result = api.send_msg(robot, {"msg_type": msg_type, "number": number, "msg": msg})
+    msg = handle_placeholder(str(msg), robot.placeholder_dict)
+    resp_dict = {"msg_type": msg_type, "number": number, "msg": msg, "group_id": group_id}
+    result = api.send_msg(robot, resp_dict)
     if status_ok(result):
-        robot.self_message.append(
-            api.get_msg(robot, {"message_id": result["data"]["message_id"]})["data"]
-        )
+        resp_dict = {"message_id": result["data"]["message_id"]}
+        robot.self_message.append(api.get_msg(robot, resp_dict)["data"])
     return result
 
-def read_msg(robot: "Concerto", msg_id: str):
+def get_msg(robot: "Concerto", msg_id: str):
     """
     获取消息内容
     :param robot: 机器人类
     :param msg_id: 消息ID
     :return: 消息内容
     """
-    return api.get_msg(robot, {"message_id": msg_id})
+    resp_dict = {"message_id": msg_id}
+    return api.get_msg(robot, resp_dict)
 
 def del_msg(robot: "Concerto", msg_id: str):
     """
@@ -399,9 +404,10 @@ def del_msg(robot: "Concerto", msg_id: str):
     :param robot: 机器人类
     :param msg_id: 消息ID
     """
-    return api.del_msg(robot, {"message_id": msg_id})
+    resp_dict = {"message_id": msg_id}
+    return api.del_msg(robot, resp_dict)
 
-def read_forward_msg(robot: "Concerto", msg_id: str):
+def get_forward_msg(robot: "Concerto", msg_id: str):
     """
     获取转发消息内容
     :param robot: 机器人类
@@ -410,7 +416,8 @@ def read_forward_msg(robot: "Concerto", msg_id: str):
     """
     if msg_id == 0:
         return None
-    result = api.get_forward_msg(robot, {"message_id": msg_id})
+    resp_dict = {"message_id": msg_id}
+    result = api.get_forward_msg(robot, resp_dict)
     if "data" in result and result["data"]:
         return result["data"]["messages"]
     else:
@@ -435,7 +442,7 @@ def send_forward_msg(robot: "Concerto", nodes: dict, group_id=None, user_id=None
     result = api.post(robot, "/send_forward_msg", data)
     if status_ok(result):
         robot.self_message.append(
-            read_msg(robot, result["data"]["message_id"])["data"]
+            get_msg(robot, result["data"]["message_id"])["data"]
         )
     return result
 
@@ -451,7 +458,7 @@ def send_private_forward_msg(robot: "Concerto", node: dict, user_id: str):
     result = api.post(robot, "/send_private_forward_msg", data)
     if status_ok(result):
         robot.self_message.append(
-            read_msg(robot, result["data"]["message_id"])["data"]
+            get_msg(robot, result["data"]["message_id"])["data"]
         )
     return result
 
@@ -467,18 +474,19 @@ def send_group_forward_msg(robot: "Concerto", node: dict, group_id: str):
     result = api.post(robot, "/send_group_forward_msg", data)
     if status_ok(result):
         robot.self_message.append(
-            read_msg(robot, result["data"]["message_id"])["data"]
+            get_msg(robot, result["data"]["message_id"])["data"]
         )
     return result
 
-def get_group_msg_history(robot: "Concerto", msg_id: str):
+def get_group_msg_history(robot: "Concerto", group_id: str):
     """
     获取群消息历史
     :param robot: 机器人类
-    :param msg_id: 消息ID
+    :param group_id: 群ID
     :return: 消息json信息
     """
-    return get_group_msg_history(robot, {"group_id": msg_id})
+    resp_dict = {"group_id": group_id}
+    return get_group_msg_history(robot, resp_dict)
 
 def reply_add(robot: "Concerto", raw: dict, accept: str, msg: str):
     """
@@ -510,7 +518,8 @@ def get_user_name(robot: "Concerto", uid: str):
     if uid in robot.user_dict:
         return robot.user_dict[uid]
     else:
-        result = api.get_stranger_info(robot, {"user_id": uid})
+        resp_dict = {"user_id": uid}
+        result = api.get_stranger_info(robot, resp_dict)
         if status_ok(result):
             name = result["data"]["nickname"]
             robot.user_dict[uid] = name
@@ -524,14 +533,46 @@ def get_group_info(robot: "Concerto", group_id: str):
     :param id: 群号
     :return: 群信息
     """
-    return api.get_group_info(robot, {"group_id": group_id})
+    resp_dict = {"group_id": group_id}
+    return api.get_group_info(robot, resp_dict)
+
+def set_group_ban(robot: "Concerto", group_id: str, user_id: str, duration: int):
+    """
+    设置群禁言
+    :param robot: 机器人类
+    :param group_id: 群号
+    :param user_id: 用户
+    :param duration: 时长
+    """
+    resp_dict = {"group_id": int(group_id), "user_id": int(user_id), "duration": int(duration)}
+    return api.set_group_ban(robot, resp_dict)
+
+def set_group_whole_ban(robot: "Concerto", group_id: str, enable: bool):
+    """
+    设置群禁言
+    :param robot: 机器人类
+    :param group_id: 群号
+    :param user_id: 用户
+    :param duration: 时长
+    """
+    resp_dict = {"group_id": int(group_id), "enable": enable}
+    return api.set_group_whole_ban(robot, resp_dict)
+
+def set_group_kick(robot: "Concerto", group_id: str, user_id: str):
+    """
+    设置群禁言
+    :param robot: 机器人类
+    :param group_id: 群号
+    :param user_id: 用户
+    """
+    resp_dict = {"group_id": int(group_id), "user_id": int(user_id)}
+    return api.set_group_kick(robot, resp_dict)
 
 def get_group_name(robot: "Concerto", group_id: str):
     """
     获取群名称
     :param robot: 机器人类
     :param id: 群号
-    :return: 群信息
     """
     if not group_id:
         return
@@ -547,18 +588,15 @@ def get_group_name(robot: "Concerto", group_id: str):
         else:
             return ""
 
-def get_image_url(robot: "Concerto", file: str):
+def get_image(robot: "Concerto", file: str):
     """
-    获取图片下载URL
+    获取图片
     :param robot: 机器人类
     :param file: 文件的标识码
     :return: 文件下载链接
     """
-    result = api.post(robot, "/get_image_url", file)
-    if status_ok(result):
-        return api.get_image(robot, {"file": file})
-    else:
-        return False
+    resp_dict = {"file": file}
+    return api.get_image(robot, resp_dict)
 
 def poke(robot: "Concerto", user_id: str, group_id=""):
     """
@@ -580,7 +618,8 @@ def set_model_show(robot: "Concerto", device: str, model_show: str):
     :param device: 设备名
     :param model_show: 展示名称
     """
-    return api.set_model_show(robot, {"model": device, "model_show": model_show})
+    resp_dict = {"model": device, "model_show": model_show}
+    return api.set_model_show(robot, resp_dict)
 
 def set_emoji(robot: "Concerto", message_id: str, emoji_id: str, is_set=True):
     """
@@ -608,7 +647,8 @@ def send_group_notice(robot: "Concerto", group_id: str, notice: str):
     :param group_id: 群ID
     :param notice: 群公告内容
     """
-    return api.send_group_notice(robot, {"group_id": group_id, "content": notice})
+    resp_dict = {"group_id": group_id, "content": notice}
+    return api.send_group_notice(robot, resp_dict)
 
 def send_like(robot: "Concerto", user_id: str, times: int):
     """
@@ -619,6 +659,17 @@ def send_like(robot: "Concerto", user_id: str, times: int):
     """
     resp_dict = {"user_id": user_id, "times": times}
     return api.send_like(robot, resp_dict)
+
+def send_group_ai_record(robot: "Concerto", group_id: str, character: str, text: str):
+    """
+    发送群AI语音
+    :param robot: 机器人类
+    :param group_id: 群ID
+    :param character: AI音色
+    :param text: 文本
+    """
+    resp_dict = {"group_id": group_id, "character": character, "text": text}
+    return api.send_group_ai_record(robot, resp_dict)
 
 def group_member_info(robot: "Concerto", group_id: str, user_id: str):
     """
@@ -654,7 +705,8 @@ def ocr_image(robot: "Concerto", img_id: str):
     :param robot: 机器人类
     :param img_id: 消息ID
     """
-    return ocr_image(robot, {"image": img_id})
+    resp_dict = {"image": img_id}
+    return ocr_image(robot, resp_dict)
 
 def simplify_traceback(tb: str):
     """
@@ -720,7 +772,7 @@ def via(condition, success=True):
                     if success:
                         self.success = True
                     return func(self, *args, **kwargs)
-                except:
+                except Exception:
                     self.errorf(f"{Fore.RED}执行{Fore.YELLOW}[{self.ID}.{func.__name__}]{Fore.RED}方法发生错误！")
                     self.errorf(Fore.RED + traceback.format_exc())
                     self.success = False
@@ -754,12 +806,16 @@ class Event:
         self.msg_id = raw.get("message_id", "")
         # 原始消息内容
         self.msg = html.unescape(raw.get("message", ""))
+        if "CQ:json" in self.msg:
+            self.msg = re.sub(r"(\s)+", "", self.msg)
         # 发送者ID
         self.sender_id = str(raw.get("sender_id", ""))
         # 发送者QQ号
         self.user_id = str(raw.get("user_id", ""))
+        # 发送者名称
+        self.user_name = raw.get("sender", {}).get("nickname", get_user_name(robot, self.user_id))
         # 发送者昵称
-        self.user_name = get_user_name(robot, self.user_id)
+        self.user_card = raw.get("sender", {}).get("card", "")
         # 群号
         self.group_id = str(raw.get("group_id", ""))
         if self.group_id == "0":
