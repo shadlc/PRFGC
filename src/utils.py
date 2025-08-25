@@ -423,22 +423,25 @@ def get_forward_msg(robot: "Concerto", msg_id: str):
     else:
         return None
 
-def send_forward_msg(robot: "Concerto", nodes: dict, group_id=None, user_id=None):
+def send_forward_msg(robot: "Concerto", nodes: dict, group_id=None, user_id=None, source=None, hidden=False):
     """
     发送转发消息
     :param robot: 机器人类
     :param node: 转发消息内容物
     :param group_id: 发送到群ID
-    :param group_id: 发送到用户ID
+    :param user_id: 发送到用户ID
+    :param source: 来源字段
     :return: 发送消息后返回的json信息
     """
-    data = {}
+    data = {"messages": nodes, "source": source}
     if group_id:
-        data = {"group_id": group_id, "messages": nodes}
+        data["group_id"] = group_id
     elif user_id:
-        data = {"user_id": user_id, "messages": nodes}
+        data["user_id"] = user_id
     else:
         return
+    if hidden:
+        data["news"] = []
     result = api.post(robot, "/send_forward_msg", data)
     if status_ok(result):
         robot.self_message.append(
@@ -813,7 +816,9 @@ class Event:
         # 发送者QQ号
         self.user_id = str(raw.get("user_id", ""))
         # 发送者名称
-        self.user_name = raw.get("sender", {}).get("nickname", get_user_name(robot, self.user_id))
+        self.user_name = raw.get("sender", {}).get("nickname", "")
+        if self.user_name == "" and self.user_id.isdigit():
+            self.user_name = get_user_name(robot, self.user_id)
         # 发送者昵称
         self.user_card = raw.get("sender", {}).get("card", "")
         # 群号

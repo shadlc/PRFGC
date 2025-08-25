@@ -92,7 +92,9 @@ class Maim(Module):
         self.router.register_class_handler(self.handle_maimbot_message)
         threading.Thread(target=self.listening, daemon=True).start()
 
-    def listening(self):
+    def listening(self, router=None):
+        if router is None:
+            router = self.router
         self.printf(f"MaiMBot消息路由正在启动并连接至{self.config["url"]}...")
         asyncio.run(self.router.run())
 
@@ -100,11 +102,17 @@ class Maim(Module):
         """处理 MaiMBot 回复的消息"""
         try:
             message: MessageBase = MessageBase.from_dict(raw_message)
+            simple_msg = ""
             if self.robot.config.is_debug:
-                simple_msg = re.sub(r"'type': 'image', 'data': '.*?'", r"'type': 'image', 'data': 'Base64File'", str(raw_message))
-                self.printf(f"{Fore.CYAN}[RECEIVE] {Fore.RESET}收到来自MaiMBot的回复: {simple_msg}")
+                simple_msg = str(raw_message)
             else:
-                self.printf(f"{Fore.CYAN}[RECEIVE] {Fore.RESET}收到来自MaiMBot的回复: {message.message_segment}")
+                simple_msg = str(message.message_segment.data)
+            simple_msg = re.sub(
+                r"'type':\s?'(image|emoji)',\s?'data':\s?'.*?'",
+                r"'type': '\1', 'data': 'Base64File'",
+                simple_msg
+            )
+            self.printf(f"{Fore.CYAN}[FROM] {Fore.RESET}{simple_msg}")
             message_segment: Seg = message.message_segment
             if message_segment.type == "command":
                 return await self.send_command(message)
@@ -332,15 +340,15 @@ class Maim(Module):
                 case "shake":
                     seg = Seg(type="poke", data="<戳一戳>")
                 case "anonymous":
-                    pass
+                    seg = Seg(type="text", data="<匿名聊天>")
                 case "share":
-                    pass
+                    seg = Seg(type="text", data="<分享>")
                 case "contact":
-                    pass
+                    seg = Seg(type="text", data="<名片>")
                 case "location":
-                    pass
+                    seg = Seg(type="text", data="<定位>")
                 case "music":
-                    pass
+                    seg = Seg(type="text", data="<音乐>")
                 case "image":
                     try:
                         url = data.get("url")
@@ -362,7 +370,7 @@ class Maim(Module):
                 case "poke":
                     seg = Seg(type="text", data="<戳一戳>")
                 case "gift":
-                    pass
+                    seg = Seg(type="text", data="<礼物>")
                 case "forward":
                     msg_id = data.get("id")
                     info = get_forward_msg(self.robot, msg_id)
@@ -372,17 +380,18 @@ class Maim(Module):
                         for i in msg_list:
                             ret_seg.append(Seg(type="text", data=f"{i["message"]}"))
                         seg = ret_seg
-                case "xml":
-                    pass
+                # case "xml":
+                #     pass
                 case "json":
                     json_data = json.loads(html.unescape(data.get("data")))
-                    detail = json_data.get("meta", {}).get("detail_1")
+                    detail = next(iter(json_data.get("meta", {}).values()))
                     title = detail.get("title", "")
                     desc = detail.get("desc", "")
-                    seg = Seg(type="text", data=f"分享<小程序[{title}:{desc}]>")
+                    tag = f"({detail.get("desc", "")})"
+                    seg = Seg(type="text", data=f"分享<小程序[{title}]:{desc}{tag}>")
                 case "file":
                     file = data.get("file")
-                    seg = Seg(type="text", data=f"上传文件<[{file}]>")
+                    seg = Seg(type="text", data=f"上传文件<{file}>")
                 case _:
                     self.errorf(f"未知CQ码: {cq_code}")
             if seg:
@@ -395,18 +404,25 @@ class Maim(Module):
         return seg_message
 
     async def reply_msg(self, msg: MessageBase):
+        maim: Maim = self.robot.maim
         try:
-            if msg.raw_message:
-                simple_msg = re.sub(r"\[CQ:(.*?),(file=[^\[]*)\]", r"[CQ:\1]", msg.raw_message)
-                self.printf(f"{Fore.GREEN}[SEND] {Fore.RESET}向MaiMBot发送消息: {simple_msg}")
-            maim: Maim = self.robot.maim
+            if msg.message_segment:
+                simple_msg = re.sub(
+                    r"type='(image|emoji)',\s?data='.*?'",
+                    r"type='\1', data='Base64File'",
+                    str(msg.message_segment.data)
+                )
+                self.printf(f"{Fore.GREEN}[TO] {Fore.RESET}{simple_msg}")
             send_status = await maim.router.send_message(msg)
             if not send_status:
                 raise RuntimeError("路由未正确配置或连接异常")
             return send_status
         except Exception:
-            self.errorf(f"发送消息失败: {traceback.format_exc()}")
-            self.errorf("请检查与MaiMBot之间的连接")
+            self.errorf(f"请检查与MaiMBot之间的连接, 发送消息失败: {traceback.format_exc()}")
+            self.warnf("自动暂停60秒后尝试重新连接MaiMBot")
+            time.sleep(60)
+            maim.router.stop()
+            threading.Thread(target=self.listening, args=(maim.router,), daemon=True).start()
 
     async def construct_message(self) -> MessageBase:
         """根据平台事件构造标准 MessageBase"""

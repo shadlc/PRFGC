@@ -31,7 +31,8 @@ class Repeater(Module):
     @via(lambda self: not self.at_or_private() and self.au(2)
         and self.config[self.owner_id]["repeat"]
         and self.event.msg not in self.config[self.owner_id].get("exclude")
-        and re.sub(r",url=.*?]","]", str(self.data.past_message)).count(f"'message': '{self.event.msg}") > 1, success=False)
+        and re.sub(r",url=.*?]","]", str(self.data.past_message)).count(f"'message': '{self.event.msg}") > 1
+        and self.event.msg != "", success=False)
     def repeat(self):
         """复读机"""
         self.printf(f"在群{Fore.MAGENTA}{self.event.group_name}({self.event.group_id}){Fore.RESET}检测到来自"

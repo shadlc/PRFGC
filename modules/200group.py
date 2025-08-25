@@ -23,14 +23,14 @@ class Group(Module):
         member_info = group_member_info(
             self.robot, self.event.group_id, self.event.self_id
         )
-        if member_info.get("role") != "owner":
+        if member_info.get("data", {}).get("role") != "owner":
             self.reply("设置失败，仅群主可以为成员设置专属头衔")
             return
         inputs = self.match(
             r"^(为|给|替)\s*(\S+)\s*(设置|添加|增加|颁发|设立)(专属)*(头衔|称号)\s*(\S+)$"
         ).groups()
         user_id = inputs[1]
-        title = inputs[4]
+        title = inputs[5]
         if user_id == "我":
             user_id = self.event.user_id
         info = group_special_title(self.robot, self.event.group_id, user_id, title)

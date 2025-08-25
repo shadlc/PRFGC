@@ -157,10 +157,10 @@ class Notice(Module):
 
         if self.event.user_id == self.robot.self_id:
             msg = "%SELF_INTRODUCTION%"
-            reply_event(self.robot, self.event, msg)
+            reply_id(self.robot, "group", self.event.group_id, msg)
         elif self.event.group_id in self.robot.config.rev_group:
             msg = self.event.user_name + "%WELCOME_NEWBIE%"
-            reply_event(self.robot, self.event, msg)
+            reply_id(self.robot, "group", self.event.group_id, msg)
 
     @via(lambda self: self.event.notice_type == "group_ban")
     def group_ban(self):

@@ -50,7 +50,7 @@ class Message(Module):
                 continue
             help_text = ""
             for i in range(4):
-                if auth_level <= i:
+                if auth_level <= i or i == 0:
                     for text in mod.HELP.get(i, []):
                         help_text += f"{text}\n"
                         if i == 0:
@@ -58,14 +58,11 @@ class Message(Module):
             if help_text:
                 help_text = f"{mod.NAME}帮助\n\n{help_text}"
                 help_list.append(build_node(help_text.strip()))
-        nodes = [
-            build_node("ConcertBot HELP"),
-            *help_list
-        ]
+        nodes = help_list
         if self.event.group_id:
-            send_forward_msg(self.robot, nodes, group_id=self.event.group_id)
+            send_forward_msg(self.robot, nodes, group_id=self.event.group_id, source="ConcertBot HELP", hidden=True)
         else:
-            send_forward_msg(self.robot, nodes, user_id=self.event.user_id)
+            send_forward_msg(self.robot, nodes, user_id=self.event.user_id, source="ConcertBot HELP", hidden=True)
 
     @via(lambda self: self.at_or_private() and self.au(1) and self.match(r"^(增加|添加|删除|取消)?\s?管理员"))
     def admin(self):

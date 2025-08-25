@@ -9,7 +9,12 @@ readme = "README.md"
 python = "^3.12"
 pillow = "^11.2.1"
 colorama = "^0.4.6"
-requests = "^2.32.3"
+playwright = "^1.54.0"
+bilibili-api-python = "^17.3.0"
+httpx = "^0.28.1"
+requests = "^2.32.5"
+idna = "^3.10"
+certifi = "^2025.8.3"
 
 [[tool.poetry.source]]
 name = "ali"

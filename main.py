@@ -1,5 +1,4 @@
-#!/usr/bin/python
-# 机器人启动入口，由外部方法调用最佳
+"""机器人启动入口"""
 
 import os
 import threading

@@ -76,7 +76,7 @@ class Webhook(Module):
     def receive_msg(self):
         try:
             header, body = listening(self.config["host"], self.config["port"])
-            if self.robot.config.is_debug and header.get("Content-Type") != "application/json":
+            if self.robot.config.is_debug and "application/json" not in header.get("Content-Type"):
                 self.warnf(f"收到一非JSON数据\n{body}")
                 return {}
             elif header.get("Transfer-Encoding") == "chunked":
