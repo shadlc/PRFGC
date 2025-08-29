@@ -1,5 +1,6 @@
 """机器人类定义"""
 
+import asyncio
 import importlib
 import json
 import logging
@@ -40,7 +41,7 @@ class Concerto:
 
         self.func = {} # 需要开放为全局函数的字典
         self.modules = {} # 所有载入模块字典
-        self.func = {} # 需要开放为全局函数的字典
+        self.persist_mods = {} # 需要持续性运行的模块
         self.placeholder_dict = import_json(
             os.path.join(self.config.data_path, self.config.lang_file)
         ).get("placeholder", {})
@@ -65,6 +66,7 @@ class Concerto:
   /   __ ____  _. _  __  /  __ /--<  __ /  
  (__/(_)/ / <_(__</_/ (_<__(_)/___/_(_)<__ 
         """
+        self.loop = asyncio.get_event_loop()
 
     def listening_console(self):
         """监听来自终端的输入并处理"""
@@ -158,19 +160,19 @@ class Concerto:
         """
         if not event.group_id:
             self.printf(
-                f"{Fore.CYAN}[RECEIVE] {Fore.RESET}"
+                f"{Fore.GREEN}[RECEIVE] {Fore.RESET}"
                 f"{Fore.MAGENTA}{event.user_name}({event.user_id}){Fore.RESET}: {event.msg}"
             )
         elif event.group_id:
             if self.at_info in event.msg:
                 self.printf(
-                    f"{Fore.CYAN}[RECEIVE] {Fore.RESET}群"
+                    f"{Fore.GREEN}[RECEIVE] {Fore.RESET}群"
                     f"{Fore.MAGENTA}{event.group_name}({event.group_id}){Fore.RESET}内"
                     f"{Fore.MAGENTA}{event.user_name}({event.user_id}){Fore.RESET}: {event.msg}"
                 )
             elif self.config.is_show_all_msg:
                 self.printf(
-                    f"{Fore.CYAN}[RECEIVE] {Fore.RESET}群"
+                    f"{Fore.GREEN}[RECEIVE] {Fore.RESET}群"
                     f"{Fore.MAGENTA}{event.group_name}({event.group_id}){Fore.RESET}内"
                     f"{Fore.MAGENTA}{event.user_name}({event.user_id}){Fore.RESET}: {event.msg}"
                 )
@@ -184,6 +186,8 @@ class Concerto:
                         break
             except Exception:
                 if event.group_id != "" and event.group_id not in self.config.rev_group:
+                    return
+                if not self.config.is_error_reply:
                     return
                 if self.config.is_debug:
                     if len(self.config.admin_list):
@@ -241,12 +245,12 @@ class Concerto:
         comment = event.raw.get("comment")
         if request_type == "friend":
             self.printf(
-                f"{Fore.YELLOW}[NOTICE]{Fore.RESET}{Fore.MAGENTA}{event.user_name}({event.user_id}){Fore.RESET}发送好友请求"
+                f"{Fore.CYAN}[NOTICE]{Fore.RESET}{Fore.MAGENTA}{event.user_name}({event.user_id}){Fore.RESET}发送好友请求"
                 f"{Fore.MAGENTA}{comment}{Fore.RESET}，使用 {Fore.CYAN}add agree/deny 备注{Fore.RESET} 同意或拒绝此请求"
             )
         elif request_type == "group":
             self.printf(
-                f"{Fore.YELLOW}[NOTICE]{Fore.RESET}{Fore.MAGENTA}{event.user_name}({event.user_id}){Fore.RESET}发送加群请求"
+                f"{Fore.CYAN}[NOTICE]{Fore.RESET}{Fore.MAGENTA}{event.user_name}({event.user_id}){Fore.RESET}发送加群请求"
                 f"{Fore.MAGENTA}{comment}{Fore.RESET}，使用 {Fore.CYAN}add agree/deny 理由{Fore.RESET} 同意或拒绝此请求"
             )
 
@@ -260,7 +264,7 @@ class Concerto:
         if self.config.is_show_heartbeat:
             received = event.raw["status"]["stat"]["PacketReceived"]
             self.printf(
-                f"{Fore.YELLOW}[NOTICE]{Fore.RESET}接收到API的第{Fore.MAGENTA}{received}{Fore.RESET}个心跳包"
+                f"{Fore.CYAN}[NOTICE]{Fore.RESET}接收到API的第{Fore.MAGENTA}{received}{Fore.RESET}个心跳包"
             )
 
     def import_modules(self):
@@ -278,7 +282,7 @@ class Concerto:
                     module = importlib.util.module_from_spec(spec)
                     spec.loader.exec_module(module)
                     is_module = False
-                    for _, obj in vars(module).items():
+                    for _, obj in list(vars(module).items()):
                         if isinstance(obj, type) and hasattr(obj, "ID") and obj.ID and hasattr(obj, "NAME") and obj.NAME:
                             is_module = True
                             self.module_enable(obj, item)
@@ -300,7 +304,7 @@ class Concerto:
             )
         else:
             self.modules[module.ID] = module
-            self.printf(f"{Fore.YELLOW}[{module.ID}] {Fore.RESET}{module.NAME}({module_file})已接入！")
+            self.printf(f"{Fore.CYAN}[{module.ID}] {Fore.RESET}{module.NAME}({module_file})已接入！")
     
     def format_to_log(self, text: str) -> str:
         """
@@ -319,14 +323,14 @@ class Concerto:
         :param console: 是否增加一行<console>
         """
         msg = handle_placeholder(str(msg), self.placeholder_dict)
-        prefix = "\r[" + time.strftime("%H:%M:%S", time.localtime()) + " INFO] "
+        prefix = f"\r[{time.strftime("%H:%M:%S", time.localtime())} INFO] "
         if self.config.is_show_image:
             msg = msg_img2char(self.config, msg)
         if flush:
             print(msg, end=end,flush=flush)
         else:
             print(f"{prefix}{msg}", end=end, flush=flush)
-        if console:
+        if console and not flush:
             print(f"\r{Fore.GREEN}<console> {Fore.RESET} ", end="")
         logger.info("%s", self.format_to_log(f"{prefix}{msg}"))
 
@@ -339,7 +343,7 @@ class Concerto:
         """
         msg = handle_placeholder(str(msg), self.placeholder_dict)
         msg = msg.replace(Fore.RESET, Fore.YELLOW)
-        prefix = "\r[" + time.strftime("%H:%M:%S", time.localtime()) + " WARN] "
+        prefix = f"\r[{time.strftime("%H:%M:%S", time.localtime())} WARN] "
         msg = f"{Fore.YELLOW}{prefix}{msg}{Fore.RESET}"
         print(msg, end=end)
         logger.info("%s", self.format_to_log(msg))
@@ -354,7 +358,7 @@ class Concerto:
         :param console: 是否增加一行<console>
         """
         msg = handle_placeholder(str(msg), self.placeholder_dict)
-        prefix = "\r[" + time.strftime("%H:%M:%S", time.localtime()) + " ERROR] "
+        prefix = f"\r[{time.strftime("%H:%M:%S", time.localtime())} ERROR] "
         msg = f"{Fore.RED}{prefix}{msg}{Fore.RESET}"
         print(msg, end=end)
         logger.info("%s", self.format_to_log(msg))

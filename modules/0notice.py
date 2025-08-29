@@ -38,7 +38,7 @@ class Notice(Module):
                     reply_id(self.robot, "group", self.event.group_id, "%BE_POKED%")
         else:
             self.printf(
-                f"{Fore.YELLOW}[{self.ID}] 接收来自"
+                f"接收来自"
                 f"{Fore.MAGENTA}{self.event.user_name}({self.event.user_id}){Fore.RESET}的戳一戳"
             )
             self.printf(
@@ -159,7 +159,7 @@ class Notice(Module):
             msg = "%SELF_INTRODUCTION%"
             reply_id(self.robot, "group", self.event.group_id, msg)
         elif self.event.group_id in self.robot.config.rev_group:
-            msg = self.event.user_name + "%WELCOME_NEWBIE%"
+            msg = self.event.user_name + " %WELCOME_NEWBIE%"
             reply_id(self.robot, "group", self.event.group_id, msg)
 
     @via(lambda self: self.event.notice_type == "group_ban")
@@ -170,20 +170,20 @@ class Notice(Module):
         if self.event.user_id == 0:
             if self.event.sub_type == "ban":
                 self.printf(
-                    f"{Fore.YELLOW}[{self.ID}]{Fore.RESET}群{Fore.MAGENTA}{self.event.group_name}({self.event.group_id}){Fore.RESET}内{Fore.MAGENTA}{self.event.operator_name}({self.event.operator_id}){Fore.RESET}设置了{Fore.YELLOW}{duration}{Fore.RESET}的全员禁言"
+                    f"群{Fore.MAGENTA}{self.event.group_name}({self.event.group_id}){Fore.RESET}内{Fore.MAGENTA}{self.event.operator_name}({self.event.operator_id}){Fore.RESET}设置了{Fore.YELLOW}{duration}{Fore.RESET}的全员禁言"
                 )
             elif self.event.sub_type == "lift_ban":
                 self.printf(
-                    f"{Fore.YELLOW}[{self.ID}]{Fore.RESET}群{Fore.MAGENTA}{self.event.group_name}({self.event.group_id}){Fore.RESET}内{Fore.MAGENTA}{self.event.operator_name}({self.event.operator_id}){Fore.RESET}解除了全员禁言"
+                    f"群{Fore.MAGENTA}{self.event.group_name}({self.event.group_id}){Fore.RESET}内{Fore.MAGENTA}{self.event.operator_name}({self.event.operator_id}){Fore.RESET}解除了全员禁言"
                 )
         else:
             if self.event.sub_type == "ban":
                 self.printf(
-                    f"{Fore.YELLOW}[{self.ID}]{Fore.RESET}群{Fore.MAGENTA}{self.event.group_name}({self.event.group_id}){Fore.RESET}内{Fore.MAGENTA}{self.event.operator_name}({self.event.operator_id}){Fore.RESET}为{Fore.MAGENTA}{self.event.user_name}({self.event.user_id}){Fore.RESET}设置了{Fore.YELLOW}{duration}{Fore.RESET}的禁言"
+                    f"群{Fore.MAGENTA}{self.event.group_name}({self.event.group_id}){Fore.RESET}内{Fore.MAGENTA}{self.event.operator_name}({self.event.operator_id}){Fore.RESET}为{Fore.MAGENTA}{self.event.user_name}({self.event.user_id}){Fore.RESET}设置了{Fore.YELLOW}{duration}{Fore.RESET}的禁言"
                 )
             elif self.event.sub_type == "lift_ban":
                 self.printf(
-                    f"{Fore.YELLOW}[{self.ID}]{Fore.RESET}群{Fore.MAGENTA}{self.event.group_name}({self.event.group_id}){Fore.RESET}内{Fore.MAGENTA}{self.event.operator_name}({self.event.operator_id}){Fore.RESET}解除了{Fore.MAGENTA}{self.event.user_name}({self.event.user_id}){Fore.RESET}的禁言"
+                    f"群{Fore.MAGENTA}{self.event.group_name}({self.event.group_id}){Fore.RESET}内{Fore.MAGENTA}{self.event.operator_name}({self.event.operator_id}){Fore.RESET}解除了{Fore.MAGENTA}{self.event.user_name}({self.event.user_id}){Fore.RESET}的禁言"
                 )
 
     @via(

@@ -8,7 +8,7 @@ import io
 import logging
 import re
 import time
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Tuple
 
 from colorama import Fore
 import threading
@@ -18,6 +18,7 @@ from PIL import Image
 
 from src.utils import (
     Module,
+    apply_formatter,
     del_msg,
     get_forward_msg,
     get_msg,
@@ -70,33 +71,41 @@ class Maim(Module):
 
     def __init__(self, event, auth=0):
         super().__init__(event, auth)
-        if hasattr(self.robot, "maim"):
+        if self.ID in self.robot.persist_mods:
             return
-        self.robot.maim = self
+        self.robot.persist_mods[self.ID] = self
         if not self.config["url"]:
             self.errorf("未配置MaiMBot链接地址，模块已禁用")
             return
         logger = logging.getLogger('maim_message')
-        logger.setLevel(logging.CRITICAL)
-        ch = logging.StreamHandler()
-        formatter = logging.Formatter(
-            fmt=f"[%(asctime)s %(levelname)s] [{self.ID}] %(message)s",
-            datefmt="%H:%M:%S"
-        )
-        ch.setFormatter(formatter)
-        logger.addHandler(ch)
-        logger.propagate = False
+        logger.setLevel(logging.INFO)
+        apply_formatter(logger, self.ID)
+        self.loop = asyncio.get_event_loop()
         target_config = TargetConfig(url=self.config["url"], token=None)
         route_config = RouteConfig({self.config["platform"]: target_config})
         self.router = Router(route_config)
         self.router.register_class_handler(self.handle_maimbot_message)
-        threading.Thread(target=self.listening, daemon=True).start()
+        self.router_run()
 
-    def listening(self, router=None):
+    def premise(self):
+        if self.ID in self.robot.persist_mods:
+            maim: Maim = self.robot.persist_mods[self.ID]
+            self.router = maim.router
+            self.loop = maim.loop
+        return self.config["url"]
+
+    def router_run(self, router=None):
+        """启动"""
         if router is None:
             router = self.router
-        self.printf(f"MaiMBot消息路由正在启动并连接至{self.config["url"]}...")
-        asyncio.run(self.router.run())
+        threading.Thread(target=self.listening, args=(router,), daemon=True, name=self.NAME).start()
+
+    def listening(self, router=None):
+        """开启监听"""
+        if router is None:
+            router = self.router
+        while True:
+            self.loop.run_until_complete(router.run())
 
     async def handle_maimbot_message(self, raw_message: dict):
         """处理 MaiMBot 回复的消息"""
@@ -106,10 +115,10 @@ class Maim(Module):
             if self.robot.config.is_debug:
                 simple_msg = str(raw_message)
             else:
-                simple_msg = str(message.message_segment.data)
+                simple_msg = str(message.message_segment)
             simple_msg = re.sub(
-                r"'type':\s?'(image|emoji)',\s?'data':\s?'.*?'",
-                r"'type': '\1', 'data': 'Base64File'",
+                r"type='(image|emoji)',\s?data='.*?'",
+                r"type='\1', data='Base64File'",
                 simple_msg
             )
             self.printf(f"{Fore.CYAN}[FROM] {Fore.RESET}{simple_msg}")
@@ -212,7 +221,7 @@ class Maim(Module):
                     "actual_id": qq_message_id,
                 },
             )
-            await self.reply_msg(message_base)
+            await self.send_to_maim(message_base)
 
     def handle_seg(self, segment: Seg) -> str:
         """处理消息结构"""
@@ -245,7 +254,7 @@ class Maim(Module):
                 new_payload = build_payload(payload, text, False)
             elif seg.type == "face":
                 face_id = seg.data
-                new_payload = build_payload(payload, f"[CQ:reply,id={face_id}]", False)
+                new_payload = build_payload(payload, f"[CQ:face,id={face_id}]", False)
             elif seg.type == "image":
                 image = seg.data
                 new_payload = build_payload(payload, f"[CQ:image,file=base64://{image},subtype=0]", False)
@@ -271,6 +280,7 @@ class Maim(Module):
                 file_path = seg.data
                 new_payload = build_payload(payload, f"[CQ:file,file=file://{file_path}]", False)
             return new_payload
+
         payload = ""
         if segment.type == "seglist":
             if not segment.data:
@@ -281,7 +291,7 @@ class Maim(Module):
             payload = process_message(segment, payload)
         return payload
 
-    async def handle_message(self, raw: str, in_reply: bool = False) -> List[Seg] | None:
+    async def handle_msg(self, raw: str, in_reply: bool = False) -> List[Seg] | None:
         """处理实际消息"""
         msg: str = raw.get("message")
         if not msg:
@@ -301,14 +311,14 @@ class Maim(Module):
             seg = None
             match cq_type:
                 case "face":
-                    face_id = data.get("id")
+                    face_id = str(data.get("id"))
                     face_content: str = qq_face.get(face_id)
                     seg = Seg(type="text", data=face_content)
                 case "reply":
                     if not in_reply:
                         msg_id = data.get("id")
                         detail = get_msg(self.robot, msg_id).get("data", {})
-                        reply_msg = await self.handle_message(detail, in_reply=True)
+                        reply_msg = await self.handle_msg(detail, in_reply=True)
                         if reply_msg is None:
                             reply_msg = "(获取发言内容失败)"
                         sender_name: str = detail.get("sender", {}).get("nickname")
@@ -352,10 +362,7 @@ class Maim(Module):
                 case "image":
                     try:
                         url = data.get("url")
-                        response = requests.get(url, timeout=5)
-                        if response.status_code != 200:
-                            raise Exception(f"HTTP Error: {response.status_code}")
-                        image_base64 = base64.b64encode(response.content).decode("utf-8")
+                        image_base64 = self.get_image_base64(url)
                         sub_type = data.get("sub_type")
                         if sub_type == 0:
                             seg = Seg(type="image", data=image_base64)
@@ -372,13 +379,11 @@ class Maim(Module):
                 case "gift":
                     seg = Seg(type="text", data="<礼物>")
                 case "forward":
-                    msg_id = data.get("id")
+                    msg_id = str(data.get("id"))
                     info = get_forward_msg(self.robot, msg_id)
                     if status_ok(info):
                         msg_list = info["data"].get("messages")
-                        ret_seg: List[Seg] = []
-                        for i in msg_list:
-                            ret_seg.append(Seg(type="text", data=f"{i["message"]}"))
+                        ret_seg: List[Seg] = await self.handle_forward_msg(msg_list)
                         seg = ret_seg
                 # case "xml":
                 #     pass
@@ -400,12 +405,81 @@ class Maim(Module):
                 else:
                     seg_message.append(seg)
             msg = msg.replace(cq_code, "", 1)
-        seg_message.insert(0, Seg(type="text", data=msg))
+        if msg:
+            seg_message.append(Seg(type="text", data=msg))
         return seg_message
 
-    async def reply_msg(self, msg: MessageBase):
-        maim: Maim = self.robot.maim
+    async def handle_forward_msg(self, msg_list: list) -> Seg | None:
+        """处理转发消息"""
+        async def process_forward_message(msg_list: list, layer: int) -> Seg:
+            """解析转发消息"""
+            if msg_list is None:
+                return None
+            seg_list: List[Seg] = []
+            process_count = 0
+            for sub_msg in msg_list:
+                sub_msg: dict
+                sender_info: dict = sub_msg.get("sender")
+                user_nickname: str = sender_info.get("nickname", "QQ用户")
+                user_nickname_str = f"【{user_nickname}】:"
+                message_of_sub_message_list: List[Dict[str, Any]] = sub_msg.get("message")
+                if not message_of_sub_message_list:
+                    continue
+                message_of_sub_message = message_of_sub_message_list[0]
+                if message_of_sub_message.get("type") == "forward":
+                    if layer >= 3:
+                        full_seg_data = Seg(type="text", data=("--" * layer) + f"【{user_nickname}】:【转发消息】\n",)
+                    else:
+                        sub_message_data = message_of_sub_message.get("data")
+                        if not sub_message_data:
+                            continue
+                        contents = sub_message_data.get("content")
+                        seg_data = await process_forward_message(contents, layer + 1)
+                        process_count += 1
+                        head_tip = Seg(type="text", data=("--" * layer) + f"【{user_nickname}】: 合并转发消息内容：\n",)
+                        full_seg_data = Seg(type="seglist", data=[head_tip, seg_data])
+                    seg_list.append(full_seg_data)
+                elif message_of_sub_message.get("type") == "text":
+                    sub_message_data = message_of_sub_message.get("data")
+                    if not sub_message_data:
+                        continue
+                    text_message = sub_message_data.get("text")
+                    seg_data = Seg(type="text", data=f"{text_message}\n")
+                    data_list: List[Any] = [Seg(type="text", data=("--" * layer) + user_nickname_str), seg_data]
+                    seg_list.append(Seg(type="seglist", data=data_list))
+                elif message_of_sub_message.get("type") == "image":
+                    process_count += 1
+                    image_data = message_of_sub_message.get("data")
+                    sub_type = image_data.get("sub_type")
+                    image_url = image_data.get("url")
+                    data_list: List[Any] = []
+                    if sub_type == 0:
+                        if process_count > 5:
+                            seg_data = Seg(type="text", data="[图片]\n")
+                        else:
+                            img_base64 = self.get_image_base64(image_url)
+                            seg_data = Seg(type="image", data=f"{img_base64}\n")
+                    else:
+                        if process_count > 3:
+                            seg_data = Seg(type="text", data="[表情包]\n")
+                        else:
+                            img_base64 = self.get_image_base64(image_url)
+                            seg_data = Seg(type="emoji", data=f"{img_base64}\n")
+                    if layer > 0:
+                        data_list = [Seg(type="text", data=("--" * layer) + user_nickname_str), seg_data]
+                    else:
+                        data_list = [Seg(type="text", data=user_nickname_str), seg_data]
+                    full_seg_data = Seg(type="seglist", data=data_list)
+                    seg_list.append(full_seg_data)
+            return Seg(type="seglist", data=seg_list)
+
+        return await process_forward_message(msg_list, 0)
+
+    async def send_to_maim(self, msg: MessageBase) -> bool:
+        """发送消息到MaiMBot"""
         try:
+            if len(msg.message_segment.data) == 0:
+                return False
             if msg.message_segment:
                 simple_msg = re.sub(
                     r"type='(image|emoji)',\s?data='.*?'",
@@ -413,16 +487,12 @@ class Maim(Module):
                     str(msg.message_segment.data)
                 )
                 self.printf(f"{Fore.GREEN}[TO] {Fore.RESET}{simple_msg}")
-            send_status = await maim.router.send_message(msg)
+            send_status = await self.router.send_message(msg)
             if not send_status:
                 raise RuntimeError("路由未正确配置或连接异常")
             return send_status
         except Exception:
             self.errorf(f"请检查与MaiMBot之间的连接, 发送消息失败: {traceback.format_exc()}")
-            self.warnf("自动暂停60秒后尝试重新连接MaiMBot")
-            time.sleep(60)
-            maim.router.stop()
-            threading.Thread(target=self.listening, args=(maim.router,), daemon=True).start()
 
     async def construct_message(self) -> MessageBase:
         """根据平台事件构造标准 MessageBase"""
@@ -462,7 +532,7 @@ class Maim(Module):
             group_info=group_info,
             format_info=format_info,
         )
-        seg_message: List[Seg] = await self.handle_message(self.event.raw)
+        seg_message: List[Seg] = await self.handle_msg(self.event.raw)
         message_segment = Seg(type="seglist", data=seg_message)
         return MessageBase(
             message_info=message_info,
@@ -470,13 +540,26 @@ class Maim(Module):
             raw_message=self.event.msg,
         )
 
+    def get_image_base64(self, url: str, timeout: str=3, max_retries: str=3) -> str:
+        """获取图片/表情包的Base64"""
+        for attempt in range(max_retries):
+            try:
+                response = requests.get(url, timeout=timeout)
+                if response.status_code != 200:
+                    raise requests.HTTPError(response=response)
+                return base64.b64encode(response.content).decode("utf-8")
+            except requests.exceptions.Timeout:
+                self.printf(f"请求图片超时重试 {attempt + 1}/{max_retries}")
+                if attempt + 1 == max_retries:
+                    raise
+
     def get_image_format(self, data: str) -> str:
         """
-        从Base64编码的数据中确定图片的格式。
+        从Base64编码的数据中确定图片的格式
         Parameters:
-            raw_data: str: Base64编码的图片数据。
+            raw_data: str: Base64编码的图片数据
         Returns:
-            format: str: 图片的格式（例如 'jpeg', 'png', 'gif'）。
+            format: str: 图片的格式（例如 'jpeg', 'png', 'gif'）
         """
         image_bytes = base64.b64decode(data)
         return Image.open(io.BytesIO(image_bytes)).format.lower()
@@ -508,6 +591,7 @@ class Maim(Module):
         and self.match(r"^(开启|启用|打开|记录|启动|关闭|禁用|取消)麦麦$")
     )
     def enable_maimbot(self):
+        """启用麦麦"""
         msg = ""
         if self.match(r"(开启|启用|打开|记录|启动)"):
             self.config[self.owner_id]["enable"] = True
@@ -519,15 +603,18 @@ class Maim(Module):
             self.save_config()
         self.reply(msg)
 
-    @via(lambda self: hasattr(self.robot, "maim")
+    @via(lambda self: self.ID in self.robot.persist_mods
          and self.config[self.owner_id]["enable"]
          and self.event.user_id not in self.config[self.owner_id].get("blacklist")
     )
     def send_maimbot(self):
-        async def _():
+        """发送至麦麦"""
+        async def send_msg_task():
             msg = await self.construct_message()
-            await self.reply_msg(msg)
-        asyncio.run(_())
+            await self.send_to_maim(msg)
+        self.loop.call_soon_threadsafe(
+            lambda: asyncio.create_task(send_msg_task())
+        )
 
 qq_face: dict = {
     "0": "[表情：惊讶]",

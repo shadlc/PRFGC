@@ -1,8 +1,12 @@
 """函数库"""
 
 import ast
+import asyncio
+from datetime import datetime, timedelta
 import importlib
+import inspect
 import io
+import logging
 import os
 import re
 import html
@@ -12,11 +16,11 @@ import json
 import random
 import traceback
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Callable, Dict, Optional, Set
 
 import requests
 from PIL import Image
-from colorama import Fore
+from colorama import Fore, Style
 
 from src.config import Config
 from src import api
@@ -24,46 +28,77 @@ from src import api
 if TYPE_CHECKING:
     from src.robot import Concerto
 
-def listening(host: str, port: int) -> list[dict|str]:
+def listening(host: str, port: int, timeout: int=5) -> tuple[dict|str]:
     """监听指定地址与端口"""
-    server = socket.socket()
-    server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    server.bind((host, port))
-    server.listen()
-    client, _ = server.accept()
-    response = bytes()
-    while True:
-        data = client.recv(1024)
-        response += data
-        if len(data) < 1024 or data[-1] == 10:
-            break
-    client.setblocking(False)
-    client.sendall(b"HTTP/1.1 200 OK\r\n\r\n")
-    client.close()
-    server.close()
-    header_str, body_str = response.decode(encoding="utf-8").split("\r\n\r\n", maxsplit=1)
-    lines = header_str.strip().splitlines()
-    method, path, version = lines[0].split()
-    header = {"Method": method, "Path": path, "HTTP-Version": version}
-    for line in lines[1:]:
-        if ":" in line:
-            key, value = line.split(":", 1)
-            header[key.strip()] = value.strip()
-    return header, body_str
+    try:
+        server = socket.socket()
+        server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        server.bind((host, port))
+        server.listen()
+        client, _ = server.accept()
+        client.settimeout(timeout)
+        # client.setblocking(False)
+        response = bytearray()
+        while b"\r\n\r\n" not in response:
+            chunk = client.recv(1024)
+            if not chunk:
+                break
+            response.extend(chunk)
+        header_bytes, remaining = response.split(b"\r\n\r\n", 1)
+        lines = header_bytes.decode("iso-8859-1").splitlines()
+        method, path, version = lines[0].split(" ", 2)
+        headers = {"Method": method, "Path": path, "HTTP-Version": version}
+        content_length = 0
+        transfer_encoding = None
+        for line in lines[1:]:
+            if ":" in line:
+                key, value = line.split(":", 1)
+                key, value = key.strip(), value.strip()
+                headers[key] = value
+                if key.lower() == "content-length":
+                    content_length = int(value)
+                elif key.lower() == "transfer-encoding":
+                    transfer_encoding = value.lower()
+        body = bytearray()
+        if transfer_encoding != "chunked":
+            body.extend(remaining)
+            while len(body) < content_length:
+                chunk = client.recv(1024)
+                if not chunk:
+                    break
+                body.extend(chunk)
+        else:
+            buffer = bytearray(remaining)
+            while True:
+                while b"\r\n" not in buffer:
+                    buffer.extend(client.recv(1024))
+                line, _, buffer = buffer.partition(b"\r\n")
+                chunk_size = int(line.decode("ascii"), 16)
+                if chunk_size == 0:
+                    while len(buffer) < 2:
+                        buffer.extend(client.recv(1024))
+                    buffer = buffer[2:]
+                    break
+                while len(buffer) < chunk_size + 2:
+                    buffer.extend(client.recv(1024))
+                body.extend(buffer[:chunk_size])
+                buffer = buffer[chunk_size+2:]
+        client.sendall(b"HTTP/1.1 200 OK\r\n\r\n")
+        body = body.decode("utf-8")
+    finally:
+        client.close()
+        server.close()
+    return headers, body
 
 def receive_msg(robot: "Concerto"):
+    body = None
     try:
         header, body = listening(robot.config.host, int(robot.config.port))
         if robot.config.is_debug and header.get("Content-Type") != "application/json":
             robot.warnf(f"收到一非JSON数据\n{body}")
             return {}
-        elif header.get("Transfer-Encoding") == "chunked":
-            body = body.split("\r\n")[1].strip()
-            rev_json = json.loads(body)
-            return rev_json
-        else:
-            rev_json = json.loads(body)
-            return rev_json
+        rev_json = json.loads(body)
+        return rev_json
     except OSError as e:
         robot.errorf(f"端口{robot.config.port}已被占用，程序终止！ {e}")
         robot.is_running = False
@@ -71,7 +106,7 @@ def receive_msg(robot: "Concerto"):
         robot.errorf(f"绑定地址有误！ {robot.config.host} 不是一个正确的可绑定地址，程序终止！ {e}")
         robot.is_running = False
     except json.JSONDecodeError as e:
-        robot.warnf(f"JSON数据解析失败！ {e}")
+        robot.warnf(f"{body} JSON数据解析失败！ {traceback.format_exc()}")
         return {}
 
 def import_json(file: str):
@@ -84,7 +119,6 @@ def import_json(file: str):
             content = temp
         return json.loads(content)
     except json.JSONDecodeError as e:
-        print(f"对文件 {file} 解析发生错误！")
         raise e
 
 def save_json(file_name: str, data: str):
@@ -92,6 +126,47 @@ def save_json(file_name: str, data: str):
     json.dump(
         data, open(file_name, "w", encoding="utf-8"), indent=2, ensure_ascii=False
     )
+
+def merge(d1: dict, d2: dict) -> dict:
+    """简单字典合并"""
+    result = d1.copy()
+    for key, value in d2.items():
+        if key in result and isinstance(result[key], dict) and isinstance(value, dict):
+            result[key] = merge(result[key], value)
+        else:
+            result[key] = value
+    return result
+
+def apply_formatter(logger: logging.Logger, mid: str):
+    """给传入的 logger 应用彩色格式化器"""
+    class ColorFormatter(logging.Formatter):
+        COLORS = {
+            logging.DEBUG: Fore.BLUE,
+            logging.WARNING: Fore.YELLOW,
+            logging.ERROR: Fore.RED,
+            logging.CRITICAL: Fore.MAGENTA + Style.BRIGHT,
+        }
+
+        def format(self, record):
+            color = self.COLORS.get(record.levelno, "")
+            reset = Style.RESET_ALL
+            record.asctime = f"{color}{record.levelname}{reset}"
+            record.levelname = f"{color}{record.levelname}{reset}"
+            record.msg = f"{color}{record.msg}{reset}"
+            return super().format(record)
+    fmt = f"\r[%(asctime)s %(levelname)s] {Fore.CYAN}[{mid}]{Fore.RESET} %(message)s"
+    fmt += f"\n\r{Fore.GREEN}<console> {Fore.RESET} "
+    formatter = ColorFormatter(fmt=fmt, datefmt="%H:%M:%S")
+    logger.propagate = False
+    if len(logger.handlers) == 0:
+        ch = logging.StreamHandler()
+        ch.setFormatter(formatter)
+        ch.terminator = ""
+        logger.addHandler(ch)
+    else:
+        logger.handlers[0].terminator = ""
+        logger.handlers[0].setFormatter(formatter)
+    return logger
 
 def calc_size(byte: int):
     """
@@ -108,7 +183,6 @@ def calc_size(byte: int):
             value = float(byte) / prefix[s]
             return "%.2f%s" % (value, s)
     return ".%sB" % byte
-
 
 def char_colorama(char: str, rgb: list):
     """
@@ -178,9 +252,11 @@ def msg_img2char(config: Config, msg: str):
     :param color: 是否渲染颜色
     :return: 转化为字符画的消息
     """
-    while re.search(r"\[CQ:image.*url=(.*?),.*\]", msg) and "[RECEIVE]" in msg:
+    if "[RECEIVE]" not in msg:
+        return msg
+    matches = re.findall(r"(\[CQ:image.*?url=([^,]*).*\])", msg)
+    for cq, url in matches:
         try:
-            url = re.search(r"\[CQ:image.*url=(.*?),.*\]", msg).groups()[0]
             data = requests.get(url, timeout=3)
             img = Image.open(io.BytesIO(data.content)).convert("RGB")
             w, h = img.size
@@ -211,9 +287,7 @@ def msg_img2char(config: Config, msg: str):
                 if row >= target_w:
                     row = 0
                     char += "\n"
-            msg = msg.replace(
-                re.search(r"(\[CQ:image.*?url=(.*?)\])", msg).groups()[0], "\n" + char
-            )
+            msg = msg.replace(cq, "\n" + char)
         except Exception:
             if config.is_debug:
                 traceback.print_exc()
@@ -417,11 +491,7 @@ def get_forward_msg(robot: "Concerto", msg_id: str):
     if msg_id == 0:
         return None
     resp_dict = {"message_id": msg_id}
-    result = api.get_forward_msg(robot, resp_dict)
-    if "data" in result and result["data"]:
-        return result["data"]["messages"]
-    else:
-        return None
+    return api.get_forward_msg(robot, resp_dict)
 
 def send_forward_msg(robot: "Concerto", nodes: dict, group_id=None, user_id=None, source=None, hidden=False):
     """
@@ -746,35 +816,49 @@ def scan_missing_modules(file_path: str):
     with open(file_path, "r", encoding="utf-8") as f:
         tree = ast.parse(f.read(), filename=file_path)
     missing = set()
+    optional = set()
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Try):
+            for stmt in node.body:
+                if isinstance(stmt, ast.Import):
+                    for alias in stmt.names:
+                        optional.add(alias.name.split(".")[0])
+                elif isinstance(stmt, ast.ImportFrom) and stmt.module:
+                    optional.add(stmt.module.split(".")[0])
+
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             for alias in node.names:
-                module_name = alias.name
-                try:
-                    importlib.import_module(module_name)
-                except ModuleNotFoundError as e:
-                    missing.add(e.name)
-                    if e.name != module_name:
-                        print(f"\r{traceback.format_exc()}")
+                module_name = alias.name.split(".")[0]
+                if module_name not in optional:
+                    try:
+                        importlib.import_module(module_name)
+                    except ModuleNotFoundError as e:
+                        missing.add(e.name)
         elif isinstance(node, ast.ImportFrom):
             if node.module:
-                try:
-                    importlib.import_module(node.module)
-                except ModuleNotFoundError:
-                    missing.add(node.module)
+                module_name = node.module.split(".")[0]
+                if module_name not in optional:
+                    try:
+                        importlib.import_module(module_name)
+                    except ModuleNotFoundError as e:
+                        missing.add(e.name)
     return missing
 
 def via(condition, success=True):
     """模块方法装饰器"""
     def decorator(func):
-        def wrapper(self: "Module", *args, **kwargs):
+        async def wrapper(self: "Module", *args, **kwargs):
             if condition(self):
                 if self.robot.config.is_debug:
                     self.printf(f"执行{Fore.YELLOW}[{func.__name__}]{Fore.RESET}方法")
                 try:
-                    if success:
-                        self.success = True
-                    return func(self, *args, **kwargs)
+                    self.success = success
+                    if inspect.iscoroutinefunction(func):
+                        return await func(self, *args, **kwargs)
+                    else:
+                        return func(self, *args, **kwargs)
                 except Exception:
                     self.errorf(f"{Fore.RED}执行{Fore.YELLOW}[{self.ID}.{func.__name__}]{Fore.RED}方法发生错误！")
                     self.errorf(Fore.RED + traceback.format_exc())
@@ -785,6 +869,71 @@ def via(condition, success=True):
         wrapper._method = True # pylint: disable=protected-access
         return wrapper
     return decorator
+
+class MiniCron:
+    """简单的Crontab""" 
+    def __init__(self, expr: str, task: Callable[[], None]) -> None:
+        """
+        expr: crontab 表达式 (如 "0 8 * * *")
+        task: 要执行的函数，无参数，无返回值
+        """
+        self.expr: str = expr
+        self.task: Callable[[], None] = task
+        self.cron_fields: Dict[str, Set[int]] = self._parse_cron(expr)
+
+    def _parse_field(self, field: str, min_val: int, max_val: int) -> Set[int]:
+        """解析单个字段，返回允许的整数集合"""
+        if field == "*":
+            return set(range(min_val, max_val + 1))
+        values: Set[int] = set()
+        for part in field.split(","):
+            if part.startswith("*/"):  # */n
+                step = int(part[2:])
+                values.update(range(min_val, max_val + 1, step))
+            elif "-" in part:
+                start, end = map(int, part.split("-"))
+                values.update(range(start, end + 1))
+            else:
+                values.add(int(part))
+        return values
+
+    def _parse_cron(self, expr: str) -> Dict[str, Set[int]]:
+        """解析 cron 表达式，返回每个字段允许的整数集合"""
+        minute, hour, day, month, weekday = expr.split()
+        return {
+            "minute": self._parse_field(minute, 0, 59),
+            "hour": self._parse_field(hour, 0, 23),
+            "day": self._parse_field(day, 1, 31),
+            "month": self._parse_field(month, 1, 12),
+            "weekday": self._parse_field(weekday, 0, 6),  # 0=周一 … 6=周日
+        }
+
+    def _next_time(self, from_time: Optional[datetime] = None) -> datetime:
+        """计算下一个匹配 cron 表达式的时间点"""
+        if from_time is None:
+            from_time = datetime.now().replace(second=0, microsecond=0) + timedelta(minutes=1)
+        else:
+            from_time = from_time.replace(second=0, microsecond=0) + timedelta(minutes=1)
+
+        while True:
+            if (from_time.minute in self.cron_fields["minute"] and
+                from_time.hour in self.cron_fields["hour"] and
+                from_time.day in self.cron_fields["day"] and
+                from_time.month in self.cron_fields["month"] and
+                from_time.weekday() in self.cron_fields["weekday"]):
+                return from_time
+            from_time += timedelta(minutes=1)
+
+    async def run(self) -> None:
+        """开始循环执行任务"""
+        next_run: datetime = self._next_time()
+        while True:
+            now: datetime = datetime.now()
+            if now >= next_run:
+                self.task()
+                next_run = self._next_time(now)
+            else:
+                await asyncio.sleep((next_run - now).total_seconds())
 
 class Event:
     """基础事件结构"""  
@@ -858,14 +1007,20 @@ class Module:
         self.config = {}
         self.data = {}
         self.init_config()
-        self.activate()
+        if not self.premise():
+            return
+        self.robot.loop.run_until_complete(self.activate())
 
-    def activate(self):
+    def premise(self):
+        """前置条件"""
+        return True
+
+    async def activate(self):
         """执行类方法"""
         for attr_name in dir(self):
-            attr = getattr(self, attr_name)
-            if not self.success and callable(attr) and getattr(attr, "_method", False):
-                attr()
+            func = getattr(self, attr_name)
+            if not self.success and callable(func) and getattr(func, "_method", False):
+                await func()
 
     def au(self, max_level=3, min_level=0):
         """检查权限等级"""
@@ -889,7 +1044,7 @@ class Module:
         return re.search(pattern, msg.strip())
 
     def is_self_send(self):
-        """判断是不是自己"""
+        """判断是不是自己发送的数据"""
         return self.robot.self_id in [self.event.user_id, self.event.sender_id]
 
     def go_on(self):
@@ -902,10 +1057,14 @@ class Module:
         if self.CONFIG is None:
             return
         self.config_file = os.path.join(self.robot.config.data_path, self.CONFIG)
-        self.config = import_json(self.config_file)
-        if self.config == {} and self.GLOBAL_CONFIG:
-            self.config = self.GLOBAL_CONFIG
-            self.save_config()
+        try:
+            self.config = import_json(self.config_file)
+        except Exception:
+            self.config = {}
+            self.errorf(f"配置文件 {self.config_file} 解析发生错误!\n{traceback.format_exc()}")
+        self.GLOBAL_CONFIG = self.GLOBAL_CONFIG or {}
+        self.config = merge(self.GLOBAL_CONFIG, self.config)
+        self.save_config()
         # 设定会话的owner_id
         if self.event.group_id:
             self.owner_id = f"g{self.event.group_id}"
@@ -915,11 +1074,11 @@ class Module:
             self.owner_id = f"u{self.robot.self_id}"
         # 读取指定会话的数据与配置文件
         self.data = self.robot.data.get(self.owner_id)
-        if self.owner_id not in self.config and self.CONV_CONFIG:
-            self.config[self.owner_id] = self.CONV_CONFIG
-            self.save_config()
-        elif self.owner_id not in self.config:
+        if self.owner_id not in self.config:
             self.config[self.owner_id] = {}
+        self.CONV_CONFIG = self.CONV_CONFIG or {}
+        self.config[self.owner_id] = merge(self.CONV_CONFIG, self.config[self.owner_id])
+        self.save_config()
 
     def save_config(self, config_content=None, owner_id=""):
         """保存模块配置"""
@@ -927,7 +1086,10 @@ class Module:
             self.config[owner_id] = config_content
         elif config_content:
             self.config = config_content
-        save_json(self.config_file, self.config)
+        try:
+            save_json(self.config_file, self.config)
+        except Exception:
+            self.errorf(f"配置文件 {self.config_file} 保存失败!\n{traceback.format_exc()}")
 
     def reply(self, msg, reply=False, force=False):
         """快捷回复消息"""
@@ -942,7 +1104,9 @@ class Module:
         :param end: 末尾字符
         :param console: 是否增加一行<console>
         """
-        self.robot.printf(f"{Fore.YELLOW}[{self.ID}]{Fore.RESET} {msg}", end=end, console=console, flush=flush)
+        if not flush:
+            msg = f"{Fore.CYAN}[{self.ID}]{Fore.RESET} {msg}"
+        self.robot.printf(msg=msg, end=end, console=console, flush=flush)
 
     def warnf(self, msg, end="\n", console=True):
         """
@@ -951,7 +1115,7 @@ class Module:
         :param end: 末尾字符
         :param console: 是否增加一行<console>
         """
-        self.robot.warnf(f"{Fore.YELLOW}[{self.ID}]{Fore.YELLOW} {msg}", end=end, console=console)
+        self.robot.warnf(f"{Fore.CYAN}[{self.ID}]{Fore.YELLOW} {msg}", end=end, console=console)
 
     def errorf(self, msg, end="\n", console=True):
         """
@@ -960,4 +1124,4 @@ class Module:
         :param end: 末尾字符
         :param console: 是否增加一行<console>
         """
-        self.robot.errorf(f"{Fore.YELLOW}[{self.ID}]{Fore.RED} {msg}", end=end, console=console)
+        self.robot.errorf(f"{Fore.CYAN}[{self.ID}]{Fore.RED} {msg}", end=end, console=console)

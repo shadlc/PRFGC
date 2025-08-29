@@ -2,22 +2,20 @@
 
 import asyncio
 import base64
+import json
 import re
 import threading
 import time
 import traceback
 
-from bilibili_api.user import User
-from bilibili_api.live import LiveRoom
-from bilibili_api.exceptions import ResponseCodeException
-
+from bilibili_api import Credential, search, sync, user
 try:
     from playwright.async_api import async_playwright
     HAS_PLAYWRIGHT = True
 except ImportError:
     HAS_PLAYWRIGHT = False
 
-from src.utils import Module, via
+from src.utils import MiniCron, Module, send_msg, via
 
 class Bilibili(Module):
     """哔哩哔哩模块"""
@@ -35,54 +33,101 @@ class Bilibili(Module):
             "[UP主] 粉丝数 [开启|关闭] | 开关UP主粉丝数通知",
             "关注 [UP主] | 关注一个新的UP主",
             "取关 [UP主] | 取关一个UP主",
-            "通知关键词 [UP主] [匹配规则] | 设置通知过滤关键词(正则匹配)",
+            "[UP主] 通知关键词 [匹配规则] | 设置通知过滤关键词(正则匹配)",
             "[UP主] 通知 [开启|关闭] | 开关UP主的通知",
         ],
     }
     CONFIG = "bilibili.json"
     GLOBAL_CONFIG = {
-        "sessdata": "",
-        "bili_jct": "",
-        "buvid3": "",
-        "user_agent": "",
-    }
-    CONV_CONFIG = {
-        "sub": {},
-        "browser": {
-            "proxy": None
+        "env": {
+            "sessdata": "",
+            "bili_jct": "",
+            "user_agent": "",
+            "ac_time_value": "",
+            "proxy": None,
+            "cron": "0 8 * * *"
         }
     }
+    CONV_CONFIG = {
+        "enable": True,
+        "sub": {}
+    }
+    AUTO_INIT = True
 
     def __init__(self, event, auth=0):
         super().__init__(event, auth)
-        if hasattr(self.robot, "bilibili"):
+        if self.ID in self.robot.persist_mods:
             return
-        self.robot.bilibili = self
+        self.robot.persist_mods[self.ID] = self
         self.live_status = {}
-        self.past_dynamics = {}
-        self.new_dynamics = {}
-        self.deleted_dynamic_list = {}
-        self.today = time.gmtime().tm_yday
+        self.dynamics = {}
         self.browser = None
         self.loop = asyncio.new_event_loop()
-        threading.Thread(target=self.start_loop, daemon=True).start()
-        threading.Thread(target=self.monitor_loop, daemon=True).start()
+        threading.Thread(target=self.start_loop, daemon=True, name=self.NAME).start()
+
+    def premise(self):
+        self.credential = Credential(
+            sessdata=self.config["env"]["sessdata"],
+            bili_jct=self.config["env"]["bili_jct"],
+            ac_time_value=self.config["env"]["ac_time_value"],
+        )
+        if self.ID in self.robot.persist_mods:
+            bilibili: Bilibili = self.robot.persist_mods[self.ID]
+            self.live_status = bilibili.live_status
+            self.dynamics = bilibili.dynamics
+            self.browser = bilibili.browser
+            self.loop = bilibili.loop
+        return super().premise()
 
     def start_loop(self):
+        """开始事件循环"""
         asyncio.set_event_loop(self.loop)
+        self.init_task()
         self.loop.run_forever()
 
-    def monitor_loop(self):
-        time.sleep(10)
+    def init_task(self, interval=60):
+        """初始化任务"""
+        time.sleep(5)
         self.printf("实时检测开启~")
-        while True:
-            self.dynamic_check()
-            self.fans_check()
-            self.live_check()
-            time.sleep(60)
+        async def dynamic_loop():
+            while True:
+                try:
+                    await self.dynamic_check(interval)
+                except Exception:
+                    self.warnf(f"动态轮询异常!\n{traceback.format_exc()}")
+                await asyncio.sleep(interval)
+        asyncio.run_coroutine_threadsafe(dynamic_loop(), self.loop)
+        async def fans_loop():
+            cron = MiniCron(self.config["env"]["cron"], lambda: sync(self.fans_check()))
+            while True:
+                try:
+                    await cron.run()
+                except Exception:
+                    self.warnf(f"粉丝数轮询异常!\n{traceback.format_exc()}")
+                await asyncio.sleep(10)
+        asyncio.run_coroutine_threadsafe(fans_loop(), self.loop)
+        async def live_loop():
+            while True:
+                try:
+                    await self.live_check()
+                except Exception:
+                    self.warnf(f"直播轮询异常!\n{traceback.format_exc()}")
+                await asyncio.sleep(10)
+        asyncio.run_coroutine_threadsafe(live_loop(), self.loop)
+        async def credential_refresh():
+            while True:
+                if await self.credential.check_refresh():
+                    await self.credential.refresh()
+                    self.config["env"]["sessdata"] = self.credential.sessdata
+                    self.config["env"]["bili_jct"] = self.credential.bili_jct
+                    self.config["env"]["ac_time_value"] = self.credential.ac_time_value
+                    self.robot.persist_mods[self.ID].config = self.config.copy()
+                    self.save_config()
+                await asyncio.sleep(interval * 100)
+        asyncio.run_coroutine_threadsafe(credential_refresh(), self.loop)
 
     @via(lambda self: self.at_or_private() and self.au(3) and self.match(r"^关注列表$"))
-    def show_follow_list(self):
+    async def show_follow_list(self):
         """显示关注列表"""
         follow_list = self.config[self.owner_id]["sub"]
         if follow_list:
@@ -91,27 +136,26 @@ class Bilibili(Module):
             else:
                 msg = "你的关注列表"
             for uid, info in follow_list.items():
-                user_info = self.get_user_info(uid)
+                user_info =  await self.get_user_simple_info(uid)
                 if user_info:
                     info["name"] = user_info[1]
                     info["fans"] = user_info[2]
                     info["avatar"] = user_info[3]
                 msg += "\n===================="
-                msg += self._print_user_data(uid, info)
-            self.save_config()
+                msg += self.parse_user_info(uid, info)
         else:
             msg = "这里还未拥有关注列表，请管理员添加吧~"
         self.reply(msg)
 
     @via(lambda self: self.at_or_private() and self.au(2) and self.match(r"^关注\s?(\S+)$"))
-    def subscribe(self):
+    async def subscribe(self):
         """关注UP主"""
         user_input = self.match(r"^关注\s?(\S+)$").groups()[0]
-        info = self.get_info(user_input)
+        info = await self.get_info(user_input)
         if info:
             uid, name, fans, avatar = info
             if uid in self.config[self.owner_id]["sub"]:
-                msg = f"你已经关注了{self.config[self.owner_id]['sub'][uid]['name']}"
+                msg = f"你已经关注了{name}"
             else:
                 self.config[self.owner_id]["sub"][uid] = {
                     "name": name,
@@ -121,21 +165,21 @@ class Bilibili(Module):
                     "dynamic_notice": True,
                     "live_notice": True,
                     "fans_notice": False,
-                    "global_notice": True
                 }
+                self.robot.persist_mods[self.ID].config = self.config.copy()
                 self.save_config()
                 msg = f"已将{name}(UID:{uid})添加至关注列表"
             msg += "\n===================="
-            msg += self._print_user_data(uid, self.config[self.owner_id]["sub"][uid])
+            msg += self.parse_user_info(uid, self.config[self.owner_id]["sub"][uid])
         else:
             msg = "查无此人"
         self.reply(msg)
 
     @via(lambda self: self.at_or_private() and self.au(2) and self.match(r"^取关\s?(\S+)$"))
-    def unsubscribe(self):
+    async def unsubscribe(self):
         """取关UP主"""
         user_input = self.match(r"^取关\s?(\S+)$").groups()[0]
-        info = self.get_info(user_input)
+        info = await self.get_info(user_input)
         if info:
             uid, name = info[0], info[1]
             if uid not in self.config[self.owner_id]["sub"]:
@@ -143,20 +187,22 @@ class Bilibili(Module):
             else:
                 msg = f"已将{name}(UID:{uid})取关"
                 del self.config[self.owner_id]["sub"][uid]
+                self.robot.persist_mods[self.ID].config = self.config.copy()
                 self.save_config()
         else:
             msg = "查无此人"
         self.reply(msg)
 
-    @via(lambda self: self.at_or_private() and self.au(2) and self.match(r"^通知关键词\s?(\S+)\s+(\S+)$"))
-    def set_keywords(self):
+    @via(lambda self: self.at_or_private() and self.au(2) and self.match(r"^(\S+)\s?通知关键词\s+(\S+)?$"))
+    async def set_keywords(self):
         """设置通知关键词"""
-        user_input, pattern = self.match(r"^通知关键词\s?(\S+)\s+(\S+)$").groups()
-        info = self.get_info(user_input)
+        user_input, pattern = self.match(r"^(\S+)\s?通知关键词\s+(\S+)$").groups()
+        info = await self.get_info(user_input)
         if info:
             uid, name = info[0], info[1]
             if uid in self.config[self.owner_id]["sub"]:
                 self.config[self.owner_id]["sub"][uid]["keyword"] = pattern
+                self.robot.persist_mods[self.ID].config = self.config.copy()
                 self.save_config()
                 msg = f"已成功为{name}设置正则匹配关键词【{pattern}】"
             else:
@@ -165,81 +211,86 @@ class Bilibili(Module):
             msg = "查无此人"
         self.reply(msg)
 
-    @via(lambda self: self.at_or_private() and self.au(3) and self.match(r"^(\S+)\s?动态\s?(开启|关闭)?$"))
-    def dynamic_control(self):
+    @via(lambda self: self.at_or_private() and self.au(3) and self.match(r"^(开启|关闭)?\s?(\S+)\s?动态(通知)?$"))
+    async def dynamic_control(self):
         """动态控制"""
-        user_input, flag = self.match(r"^(\S+)\s?动态\s?(开启|关闭)?$").groups()
-        info = self.get_info(user_input)
+        flag, user_input, _ = self.match(r"^(开启|关闭)?\s?(\S+)\s?动态(通知)?$").groups()
+        info = await self.get_info(user_input)
         if info:
             uid, name = info[0], info[1]
             if not flag:
-                dynamic = self.get_latest_dynamic(uid)
+                dynamic = await self.get_latest_dynamic(int(uid))
                 if dynamic:
-                    name, dynamic_id, _, content = dynamic
-                    msg = f"{name}的最新一条动态："
-                    msg += f"\nhttps://t.bilibili.com/{dynamic_id}"
+                    msg = f"{dynamic["author"]}的最新一条动态:"
+                    msg += f"\nhttps://t.bilibili.com/{dynamic["dynamic_id"]}\n"
                     if not HAS_PLAYWRIGHT:
-                        msg += f"\n{content}"
+                        msg += f"\n{dynamic["content"]}"
+                        for img in dynamic["imgs"]:
+                            msg += f"[CQ:image,file={img}]"
+                        if dynamic["origin"]:
+                            msg += "========================="
+                            msg += dynamic["origin"]["content"]
+                            for img in dynamic["origin"]["imgs"]:
+                                msg += f"[CQ:image,file={img}]"
                     else:
-                        screenshot_base64 = self.run_async(self.get_dynamic_screenshot(dynamic_id))
+                        screenshot_base64 = await self.get_dynamic_screenshot(dynamic["dynamic_id"])
                         if screenshot_base64:
                             msg += f"\n[CQ:image,file=base64://{screenshot_base64}]"
-                        else:
-                            msg += f"\n{content}"
                 else:
                     msg = f"{name}没有发过任何动态..."
             elif uid in self.config[self.owner_id]["sub"]:
                 status = flag == "开启"
                 self.config[self.owner_id]["sub"][uid]["dynamic_notice"] = status
+                self.robot.persist_mods[self.ID].config = self.config.copy()
                 self.save_config()
-                msg = f"已{'开启' if status else '关闭'}对{name}的动态观测~"
+                msg = f"已{flag}对{name}的动态观测~"
             else:
                 msg = "请先关注UP主~"
         else:
             msg = "查无此人"
         self.reply(msg)
 
-    @via(lambda self: self.at_or_private() and self.au(3) and self.match(r"^(\S+)\s?直播\s?(开启|关闭)?$"))
-    def live_control(self):
+    @via(lambda self: self.at_or_private() and self.au(3) and self.match(r"^(开启|关闭)?\s?(\S+)\s?直播(通知)?$"))
+    async def live_control(self):
         """直播控制"""
-        user_input, flag = self.match(r"^(\S+)\s?直播\s?(开启|关闭)?$").groups()
-        info = self.get_info(user_input)
+        flag, user_input, _ = self.match(r"^(开启|关闭)?\s?(\S+)\s?直播(通知)?$").groups()
+        info = await self.get_info(user_input)
         if info:
             uid, name = info[0], info[1]
             if not flag:
-                status = self.get_live_status(uid)
-                if status:
-                    online, title, cover, room_id, live_time, online_num, keyframe = status
-                    if online:
-                        msg = f"{name}正在直播："
-                        msg += f"\n{title}"
+                info = await self.get_live_info(uid)
+                if info:
+                    status = info.get("liveStatus")
+                    title = info.get("title")
+                    cover = info.get("cover")
+                    room_id = info.get("roomid")
+                    if status:
+                        msg = f"{name}正在直播:\n"
+                        msg += f"\n标题: {title}"
+                        msg += f"\n链接: https://live.bilibili.com/{room_id}"
                         if cover:
                             msg += f"\n[CQ:image,file={cover}]"
-                        msg += f"\nhttps://live.bilibili.com/{room_id}"
-                        msg += f"\n已经直播了{time.strftime('%H小时%M分钟', time.gmtime(time.time() - int(live_time)))}，{online_num}人在看"
-                        if keyframe:
-                            msg += f"\n========近期画面========"
-                            msg += f"\n[CQ:image,file={keyframe}]"
                     else:
-                        msg = f"{name}在休息中哦~"
+                        msg = f"{name}还在休息中哦~"
                 else:
                     msg = f"{name}从来没有直播过哦~"
             elif uid in self.config[self.owner_id]["sub"]:
                 status = flag == "开启"
                 self.config[self.owner_id]["sub"][uid]["live_notice"] = status
+                self.robot.persist_mods[self.ID].config = self.config.copy()
                 self.save_config()
-                msg = f"已{'开启' if status else '关闭'}对{name}的直播通知~"
+                msg = f"已{"开启" if status else "关闭"}对{name}的直播通知~"
             else:
                 msg = "请先关注UP主~"
         else:
             msg = "查无此人"
         self.reply(msg)
 
-    @via(lambda self: self.at_or_private() and self.au(3) and self.match(r"^(\S+)\s?粉丝数\s?(开启|关闭)?$"))
-    def fans_control(self):
+    @via(lambda self: self.at_or_private() and self.au(3) and self.match(r"^(开启|关闭)?(\S+)\s?粉丝数(通知)?$"))
+    async def fans_control(self):
         """粉丝数控制"""
-        user_input, flag = self.match(r"^(\S+)\s?粉丝数\s?(开启|关闭)?$").groups()
-        info = self.get_info(user_input)
+        flag, user_input, _ = self.match(r"^(开启|关闭)?(\S+)\s?粉丝数(通知)?$").groups()
+        info = await self.get_info(user_input)
         if info:
             uid, name, fans, avatar = info
             if not flag:
@@ -247,68 +298,50 @@ class Bilibili(Module):
                 msg += f"\n[CQ:image,file={avatar}]"
             elif uid in self.config[self.owner_id]["sub"]:
                 status = flag == "开启"
-                self.config[self.owner_id]["sub"][uid]["fans_notice"] = status
+                self.config[self.owner_id]["sub"]["fans_notice"] = status
+                self.robot.persist_mods[self.ID].config = self.config.copy()
                 self.save_config()
-                msg = f"已{'开启' if status else '关闭'}对{name}的粉丝数通知~"
+                msg = f"已{"开启" if status else "关闭"}对{name}的粉丝数通知~"
             else:
                 msg = "请先关注UP主~"
         else:
             msg = "查无此人"
         self.reply(msg)
 
-    @via(lambda self: self.at_or_private() and self.au(2) and self.match(r"^(\S+)\s?通知\s?(开启|关闭)$"))
-    def notice_control(self):
+    @via(lambda self: self.at_or_private() and self.au(2) and self.match(r"^(开启|关闭)[b|B|哔]站通知$"))
+    def enable(self):
         """通知控制"""
-        user_input, flag = self.match(r"^(\S+)\s?通知\s?(开启|关闭)$").groups()
-        if user_input == "全部":
-            status = flag == "开启"
-            for uid in self.config[self.owner_id]["sub"]:
-                self.config[self.owner_id]["sub"][uid]["global_notice"] = status
-            self.save_config()
-            msg = f"已{flag}全体UP主的通知~"
-        else:
-            info = self.get_info(user_input)
-            if info:
-                uid, name = info[0], info[1]
-                if uid in self.config[self.owner_id]["sub"]:
-                    status = flag == "开启"
-                    self.config[self.owner_id]["sub"][uid]["global_notice"] = status
-                    self.save_config()
-                    msg = f"已{flag}对{name}的全部通知~"
-                else:
-                    msg = "请先关注UP主~"
-            else:
-                msg = "查无此人"
+        flag = self.match(r"(开启|关闭)").groups()[0]
+        status = flag == "开启"
+        self.config[self.owner_id]["enable"] = status
+        self.robot.persist_mods[self.ID].config = self.config.copy()
+        self.save_config()
+        msg = f"已{flag}B站通知~"
         self.reply(msg)
 
     async def init_browser(self):
         """初始化浏览器"""
+        if not HAS_PLAYWRIGHT:
+            return None
+
         if self.browser:
             return self.browser
 
-        if not HAS_PLAYWRIGHT:
-            return None
-
         p = await async_playwright().start()
-        browser_config = self.config["browser"].copy()
-        proxy = browser_config.pop("proxy", None)
-        if proxy:
+        browser_config = {}
+        if proxy := self.config["proxy"]:
             browser_config["proxy"] = {"server": proxy}
-
         self.browser = await p.chromium.launch(**browser_config)
         return self.browser
 
-    async def get_dynamic_screenshot(self, dynamic_id, style="mobile"):
+    async def get_dynamic_screenshot(self, dynamic_id, style="mobile") -> str:
         """获取动态截图并返回base64"""
-        if not HAS_PLAYWRIGHT:
-            return None
-            
         if style.lower() == "mobile":
             return await self.get_dynamic_screenshot_mobile(dynamic_id)
         else:
             return await self.get_dynamic_screenshot_pc(dynamic_id)
 
-    async def get_dynamic_screenshot_mobile(self, dynamic_id):
+    async def get_dynamic_screenshot_mobile(self, dynamic_id) -> str:
         """移动端动态截图"""
         url = f"https://m.bilibili.com/dynamic/{dynamic_id}"
         browser = await self.init_browser()
@@ -340,30 +373,30 @@ class Bilibili(Module):
                 return None
 
             await page.add_script_tag(content="""
-                document.querySelectorAll('.opus-float-btn').forEach(v=>v.remove());
-                document.querySelectorAll('.dynamic-float-btn').forEach(v=>v.remove());
-                document.querySelectorAll('.dyn-header__following').forEach(v=>v.remove());
-                document.querySelectorAll('.dyn-share').forEach(v=>v.remove());
+                document.querySelectorAll(".opus-float-btn").forEach(v=>v.remove());
+                document.querySelectorAll(".dynamic-float-btn").forEach(v=>v.remove());
+                document.querySelectorAll(".dyn-header__following").forEach(v=>v.remove());
+                document.querySelectorAll(".dyn-share").forEach(v=>v.remove());
 
-                const contentDiv = document.getElementsByClassName('dyn-card')[0];
-                const wrapperDiv = document.createElement('div');
+                const contentDiv = document.getElementsByClassName("dyn-card")[0];
+                const wrapperDiv = document.createElement("div");
                 contentDiv.parentNode.insertBefore(wrapperDiv, contentDiv);
                 wrapperDiv.appendChild(contentDiv);
 
-                wrapperDiv.style.padding = '10px';
-                wrapperDiv.style.backgroundImage = 'linear-gradient(to bottom right, #c8beff, #bef5ff)';
-                contentDiv.style.boxShadow = '0px 0px 10px 2px #fff';
-                contentDiv.style.border = '2px solid white';
-                contentDiv.style.borderRadius = '10px';
-                contentDiv.style.background = 'rgba(255,255,255,0.7)';
-                contentDiv.style.fontFamily = 'Noto Sans CJK SC, sans-serif';
-                contentDiv.style.overflowWrap = 'break-word';
+                wrapperDiv.style.padding = "10px";
+                wrapperDiv.style.backgroundImage = "linear-gradient(to bottom right, #c8beff, #bef5ff)";
+                contentDiv.style.boxShadow = "0px 0px 10px 2px #fff";
+                contentDiv.style.border = "2px solid white";
+                contentDiv.style.borderRadius = "10px";
+                contentDiv.style.background = "rgba(255,255,255,0.7)";
+                contentDiv.style.fontFamily = "Noto Sans CJK SC, sans-serif";
+                contentDiv.style.overflowWrap = "break-word";
 
-                document.getElementsByClassName('dyn-content__orig')[0].style.backgroundColor = 'transparent';
-                document.querySelectorAll('img').forEach(v=>{ v.style.border = '2px solid white'; });
-                document.getElementsByClassName('dyn-article__card').forEach(v=>{ v.style.border = '2px solid white'; v.style.background = 'transparent'; });
-                document.querySelectorAll('[class*="pair--"]>*').forEach((e)=>{e.style.width="42.9vmin";e.style.height="42.9vmin";});
-                document.querySelectorAll('[class*="well--"]>*').forEach((e)=>{e.style.width="28vmin";e.style.height="28vmin";});
+                document.getElementsByClassName("dyn-content__orig")[0].style.backgroundColor = "transparent";
+                document.querySelectorAll("img").forEach(v=>{ v.style.border = "2px solid white"; });
+                document.getElementsByClassName("dyn-article__card").forEach(v=>{ v.style.border = "2px solid white"; v.style.background = "transparent"; });
+                document.querySelectorAll("[class*="pair--"]>*").forEach((e)=>{e.style.width="42.9vmin";e.style.height="42.9vmin";});
+                document.querySelectorAll("[class*="well--"]>*").forEach((e)=>{e.style.width="28vmin";e.style.height="28vmin";});
             """)
 
             card = await page.query_selector(".card-wrap")
@@ -371,7 +404,7 @@ class Bilibili(Module):
                 clip = await card.bounding_box()
                 if clip:
                     screenshot = await page.screenshot(clip=clip, full_page=True)
-                    return base64.b64encode(screenshot).decode('utf-8')
+                    return base64.b64encode(screenshot).decode("utf-8")
         except Exception as e:
             self.errorf(f"截取动态【{url}】时发生错误：{traceback.format_exc()}")
         finally:
@@ -379,7 +412,7 @@ class Bilibili(Module):
             await context.close()
         return None
 
-    async def get_dynamic_screenshot_pc(self, dynamic_id):
+    async def get_dynamic_screenshot_pc(self, dynamic_id) -> str:
         """电脑端动态截图"""
         url = f"https://t.bilibili.com/{dynamic_id}"
         browser = await self.init_browser()
@@ -419,474 +452,283 @@ class Bilibili(Module):
                         if bar_bound:
                             clip["height"] = bar_bound["y"] - clip["y"]
                     screenshot = await page.screenshot(clip=clip, full_page=True)
-                    return base64.b64encode(screenshot).decode('utf-8')
+                    return base64.b64encode(screenshot).decode("utf-8")
         except Exception as e:
             self.errorf(f"截取动态【{url}】时发生错误：{traceback.format_exc()}")
         finally:
             await context.close()
         return None
 
-    def live_check(self):
-        """直播检查"""
-        uids = self.get_uid_list("live")
-        if not uids:
-            return
-
-        try:
-            for uid in uids:
-                room_info = self.run_async(LiveRoom(uid).get_room_info())
-                if room_info:
-                    status = 1 if room_info['live_status'] == 1 else 0
-                    if uid not in self.live_status:
-                        self.live_status[uid] = status
-                        continue
-
-                    if self.live_status[uid] == status:
-                        continue
-
-                    self.live_status[uid] = status
-                    if status:
-                        for owner_id in self.config:
-                            if owner_id == "base_path" or owner_id == "data_file" or owner_id == "sessdata" or owner_id == "user_agent" or owner_id == "browser":
-                                continue
-
-                            if uid in self.config[owner_id]["sub"]:
-                                option = self.config[owner_id]["sub"][uid]
-                                if (option["global_notice"] and option["live_notice"] and 
-                                    re.search(option["keyword"], room_info["title"])):
-                                    room_id = room_info["room_id"]
-                                    msg = f'{room_info["uname"]}开播啦~'
-                                    msg += f'\n{room_info["title"]}'
-                                    if room_info["cover"]:
-                                        msg += f'\n[CQ:image,file={room_info["cover"]}]'
-                                    msg += f'https://live.bilibili.com/{room_id}'
-                                    if room_info["keyframe"]:
-                                        msg += f'\n========上次直播画面========'
-                                        msg += f'\n[CQ:image,file={room_info["keyframe"]}]'
-                                    self.reply_back(owner_id, msg)
-        except Exception as e:
-            self.warnf(f"爬取直播状态超时: {e}")
-            time.sleep(10)
-
-    def dynamic_check(self):
+    async def dynamic_check(self, interval=10):
         """动态检查"""
-        uids = self.get_uid_list("dynamic")
-        if not uids:
+        uid_list = self.get_uid_list("dynamic")
+        if len(uid_list) == 0:
             return
-
-        for uid in uids:
-            try:
-                if not self.refresh_dynamics(uid):
-                    self.warnf("冷却60秒~")
-                    time.sleep(60)
-            except Exception as e:
-                self.warnf(f"爬取动态超时({e}),等待下一轮询重试~")
-                time.sleep(30)
-                return
-
-            time.sleep(10)
+        for uid in uid_list:
+            name = self.get_local_name(uid)
+            if uid not in self.dynamics or len(self.dynamics[uid]) == 0:
+                dynamics = await self.get_user_dynamics(uid)
+                if len(dynamics) == 0:
+                    continue
+                self.printf(f"已初始化{name}({uid})的动态共{len(dynamics)}条")
+                self.dynamics[uid] = dynamics
+                await asyncio.sleep(1)
+                continue
+            dynamics = await self.get_new_dynamics(uid)
+            if not dynamics:
+                continue
+            self.printf(f"{name}({uid})发布了新动态{len(dynamics)}条")
             type_msg = {
-                0: "发布了新动态", 
-                1: "转发了一条动态", 
-                2: "发布了新投稿", 
-                6: "发布了新图文动态", 
-                7: "发布了新文字动态", 
-                8: "发布了新专栏", 
-                9: "发布了新音频"
+                1: "转发了一条动态",
+                2: "发布了新动态",
+                8: "投稿了新视频",
             }
+            notice_list = self.get_notice_list("dynamic", uid)
+            for owner_id in notice_list:
+                for item in dynamics:
+                    self.dynamics[uid].append(item)
+                    dynamic = self.parse_dynamic(item)
+                    msg = f"{dynamic["author"]}{type_msg.get(dynamic["dynamic_type"], "发布了新动态")}"
+                    msg += f"\nhttps://t.bilibili.com/{dynamic["dynamic_id"]}\n"
+                    if not HAS_PLAYWRIGHT:
+                        msg += f"\n{dynamic["content"]}"
+                        for img in dynamic["imgs"]:
+                            msg += f"[CQ:image,file={img}]"
+                        if dynamic["origin"]:
+                            msg += "========================="
+                            msg += dynamic["origin"]["content"]
+                            for img in dynamic["origin"]["imgs"]:
+                                msg += f"[CQ:image,file={img}]"
+                    else:
+                        screenshot_base64 = await self.get_dynamic_screenshot(dynamic["dynamic_id"])
+                        if screenshot_base64:
+                            msg += f"\n[CQ:image,file=base64://{screenshot_base64}]"
+                self.reply_back(owner_id, msg)
+                await asyncio.sleep(3)
+            await asyncio.sleep(interval)
 
-            dynamics = self.get_new_dynamics(uid)
-            for dynamic in dynamics:
-                dynamic_id = dynamic["dynamic_id"]
-                author = dynamic["author"]
-                dynamic_type = dynamic["dynamic_type"]
-                content = dynamic["content"]
-
-                for owner_id in self.config:
-                    if owner_id == "base_path" or owner_id == "data_file" or owner_id == "sessdata" or owner_id == "user_agent" or owner_id == "browser":
-                        continue
-
-                    if uid in self.config[owner_id]["sub"]:
-                        info = self.config[owner_id]["sub"][uid]
-                        if (info["global_notice"] and info["dynamic_notice"] and 
-                            re.search(info["keyword"], content)):
-                            author = self.get_name_by_uid(uid)
-                            if dynamic_type in type_msg:
-                                msg = f'{author}{type_msg[dynamic_type]}：'
-                            else:
-                                msg = f'{author}发布了新动态{dynamic_type}：'
-
-                            msg += f'\nhttps://t.bilibili.com/{dynamic_id}'
-                            if not HAS_PLAYWRIGHT:
-                                msg += f"\n{content}"
-                            else:
-                                screenshot_base64 = self.run_async(self.get_dynamic_screenshot(dynamic_id))
-                                if screenshot_base64:
-                                    msg += f'\n[CQ:image,file=base64://{screenshot_base64}]'
-                                else:
-                                    msg += f"\n{content}"
-
-                            self.reply_back(owner_id, msg)
-                            time.sleep(5)
-
-            dynamics = self.get_deleted_dynamic(uid)
-            if not dynamics or uid not in self.deleted_dynamic_list:
-                self.deleted_dynamic_list[uid] = []
-
-            self.deleted_dynamic_list[uid] += dynamics
-            max_count = 0
-            for item in self.deleted_dynamic_list[uid]:
-                if (count := self.deleted_dynamic_list[uid].count(item)) > max_count:
-                    max_count = count
-
-            if max_count < 5:
+    async def live_check(self, interval=10):
+        """直播检查"""
+        uid_list = self.get_uid_list("live")
+        if len(uid_list) == 0:
+            return
+        for uid in uid_list:
+            info = await self.get_live_info(uid)
+            if not info:
+                return
+            status = info.get("liveStatus")
+            title = info.get("title")
+            cover = info.get("cover")
+            room_id = info.get("roomid")
+            if self.live_status.get(uid, 0) == status:
                 continue
 
-            for dynamic in dynamics:
-                dynamic_id = dynamic["dynamic_id"]
-                author = dynamic["author"]
-                dynamic_type = dynamic["dynamic_type"]
-                content = dynamic["content"]
+            self.live_status[uid] = status
+            if not status:
+                return
+            notice_list = self.get_notice_list("live", uid)
+            for owner_id in notice_list:
+                uname = self.get_local_name(uid)
+                msg = f"{uname}开播啦~\n"
+                msg += f"\n标题: {title}"
+                msg += f"\n链接: https://live.bilibili.com/{room_id}"
+                if cover:
+                    msg += f"\n[CQ:image,file={cover}]"
+                self.reply_back(owner_id, msg)
+            await asyncio.sleep(interval)
 
-                for owner_id in self.config:
-                    if owner_id == "base_path" or owner_id == "data_file" or owner_id == "sessdata" or owner_id == "user_agent" or owner_id == "browser":
-                        continue
-
-                    if uid in self.config[owner_id]["sub"]:
-                        info = self.config[owner_id]["sub"][uid]
-                        if (info["global_notice"] and info["dynamic_notice"] and 
-                            re.search(info["keyword"], content)):
-                            author = self.get_name_by_uid(uid)
-                            msg = ""
-                            if not HAS_PLAYWRIGHT:
-                                msg = f'{author}删除了一条动态~但我没有来得及保存截图~嘤嘤嘤~'
-                                msg += f'\n\n动态内容：\n{content}'
-                                msg += f'\n\n动态旧地址：https://t.bilibili.com/{dynamic_id}'
-                            else:
-                                msg = f'{author}已将此动态删除啦~'
-                                # 尝试获取已保存的截图
-                                screenshot_base64 = self.run_async(self.get_dynamic_screenshot(dynamic_id))
-                                if screenshot_base64:
-                                    msg += f'\n[CQ:image,file=base64://{screenshot_base64}]'
-                                else:
-                                    msg += f"\n{content}"
-
-                            if dynamic in self.past_dynamics[uid]:
-                                self.past_dynamics[uid].remove(dynamic)
-                                self.deleted_dynamic_list[uid] = [x for x in self.deleted_dynamic_list[uid] if x != dynamic]
-
-                            self.reply_back(owner_id, msg)
-                            time.sleep(5)
-
-    def fans_check(self, check_day=True):
+    async def fans_check(self, interval=10):
         """粉丝数检查"""
-        if check_day and self.today == time.gmtime().tm_yday:
+        uid_list = self.get_uid_list("fans")
+        if len(uid_list) == 0:
             return
-
-        uids = self.get_uid_list("fans")
-        if not uids:
-            return
-
-        for uid in uids:
-            try:
-                info = self.get_user_info(uid)
-            except Exception as e:
-                self.warnf(f"爬取粉丝数超时: {e}")
-                time.sleep(2)
-                continue
-
+        for uid in uid_list:
+            info =  await self.get_user_simple_info(uid)
             if info:
                 uid, name, fans, avatar = info
                 past_fans = int(self.get_follow_list_info(uid, "fans"))
                 if past_fans == fans:
                     continue
 
-                self.today = time.gmtime().tm_yday
-                for owner_id in self.config:
-                    if owner_id == "base_path" or owner_id == "data_file" or owner_id == "sessdata" or owner_id == "user_agent" or owner_id == "browser":
+                notice_list = self.get_notice_list("fans", uid)
+                for owner_id in notice_list:
+                    msg = f"\n[CQ:image,file={avatar}]"
+                    msg += f"{name}当前的粉丝数为：{fans}"
+                    diff = fans - past_fans
+                    if "gpt" in self.robot.func:
+                        if diff > 0:
+                            msg += f"\n相比上次记录，粉丝数增加了{diff}"
+                        else:
+                            msg += f"\n相比上次记录，粉丝数减少了了{abs(diff)}"
+                        date = time.strftime("%Y年%m月%d日", time.localtime())
+                        prompt = (
+                            f"今天是{date}，B站账号《{name}》从原来的粉丝数量{past_fans}变化为{fans}个，"
+                            "请用简短的两句话，表达自己的看法，请多夹杂日式颜文字和可爱的语气来说明，"
+                            "并使用括号描述自己的动作与心情，如果明白，请直接回复内容"
+                        )
+                        msg += "\n" + self.robot.func["gpt"](prompt)
+                    elif diff > 0:
+                        msg += f"\n相比上次记录，粉丝数增加了{diff}，"
+                        if diff > 10000 or diff > fans:
+                            msg += f"{name}的涨粉太浮夸啦！"
+                        elif diff > 1000 or (1000 < fans < 10000 and diff > fans/10):
+                            msg += "成为百大指日可待~"
+                        elif diff > 100 or diff > fans/40:
+                            msg += "很棒棒啦，继续加把劲~"
+                        elif diff > 10 or diff > fans/100:
+                            msg += "继续加油哦~"
+                        else:
+                            msg += "聊胜于无嘛(oﾟvﾟ)ノ"
+                    elif diff < 0:
+                        diff = abs(diff)
+                        msg += f"\n相比上次记录，粉丝数减少了了{diff}，"
+                        if diff > 10000 or diff > fans/2:
+                            msg += "仿佛只在次贷危机看过类似的场景..."
+                        elif diff > 1000 or (fans > 10000 and diff > fans/10):
+                            msg += "大危机！(っ °Д °;)っ"
+                        elif diff > 200 or (fans > 10000 and diff > fans/50):
+                            msg += "哦吼，不太妙哦~(#｀-_ゝ-)"
+                        elif diff > 25 or diff > fans/100:
+                            msg += "一点小失误...(￣﹃￣)"
+                        else:
+                            msg += "统计学上来说这很正常"
+                    else:
                         continue
+                    self.update_follow_list_info(uid, {"fans": fans})
+                    self.reply_back(owner_id, msg)
+            await asyncio.sleep(interval)
 
-                    if uid in self.config[owner_id]["sub"]:
-                        info = self.config[owner_id]["sub"][uid]
-                        if info["global_notice"] and info["fans_notice"]:
-                            msg = f'\n[CQ:image,file={avatar}]'
-                            msg += f'{name}当前的粉丝数为：{fans}'
-                            diff = fans - past_fans
-
-                            if hasattr(self.robot, "get_chatgpt"):
-                                if diff > 0:
-                                    msg += f'\n相比上次记录，粉丝数增加了{diff}'
-                                else:
-                                    msg += f'\n相比上次记录，粉丝数减少了了{abs(diff)}'
-
-                                date = time.strftime("%Y年%m月%d日", time.localtime())
-                                prompt = f'今天是{date}，账号《{name}》从原来的粉丝数量{past_fans}变化为{fans}个，请用简短的两句话，表达自己的看法，请多夹杂日式颜文字和可爱的语气来说明，并使用括号描述自己的动作与心情，如果明白，请直接回复内容'
-                                msg += '\n' + self.robot.get_chatgpt(prompt)
-                            elif diff > 0:
-                                msg += f'\n相比上次记录，粉丝数增加了{diff}，'
-                                if diff > 10000 or diff > fans:
-                                    msg += f'大跃进都没有{name}的涨粉浮夸！'
-                                elif diff > 1000 or (1000 < fans < 10000 and diff > fans/10):
-                                    msg += f'成为百大指日可待~'
-                                elif diff > 100 or diff > fans/40:
-                                    msg += f'很棒棒啦，继续加把劲~'
-                                elif diff > 10 or diff > fans/100:
-                                    msg += f'继续加油哦~'
-                                else:
-                                    msg += f'聊胜于无嘛(oﾟvﾟ)ノ'
-                            elif diff < 0:
-                                diff = abs(diff)
-                                msg += f'\n相比上次记录，粉丝数减少了了{diff}，'
-                                if diff > 10000 or diff > fans/2:
-                                    msg += f'仿佛只在次贷危机看过类似的场景...'
-                                elif diff > 1000 or (fans > 10000 and diff > fans/10):
-                                    msg += f'大危机！(っ °Д °;)っ'
-                                elif diff > 200 or (fans > 10000 and diff > fans/50):
-                                    msg += f'哦吼，不太妙哦~(#｀-_ゝ-)'
-                                elif diff > 25 or diff > fans/100:
-                                    msg += f'一点小失误...(￣﹃￣)'
-                                else:
-                                    msg += f'统计学上来说这很正常'
-                            else:
-                                continue
-
-                            self.update_follow_list_info(uid, {"fans": fans})
-                            self.reply_back(owner_id, msg)
-            time.sleep(2)
-
-    def get_follow_list_info(self, uid, key):
+    def get_follow_list_info(self, uid: str, key):
         """获取关注列表信息"""
         for owner_id in self.config:
-            if owner_id == "base_path" or owner_id == "data_file" or owner_id == "sessdata" or owner_id == "user_agent" or owner_id == "browser":
+            if owner_id == "env":
                 continue
 
-            if uid in self.config[owner_id]["sub"]:
-                return self.config[owner_id]["sub"][uid].get(key, "")
+            if uid in self.config[self.owner_id]["sub"]:
+                return self.config[self.owner_id]["sub"][uid].get(key, "")
         return ""
 
-    def update_follow_list_info(self, uid, data):
+    def update_follow_list_info(self, uid: str, data: dict, owner_id: str=None):
         """更新关注列表信息"""
+        if not owner_id:
+            owner_id = self.owner_id
         for key, value in data.items():
             for owner_id in self.config:
-                if owner_id == "base_path" or owner_id == "data_file" or owner_id == "sessdata" or owner_id == "user_agent" or owner_id == "browser":
+                if owner_id == "env":
                     continue
-
                 if uid in self.config[owner_id]["sub"]:
+        
                     self.config[owner_id]["sub"][uid][key] = value
-
+        self.robot.persist_mods[self.ID].config = self.config.copy()
         self.save_config()
 
-    def refresh_dynamics(self, uid):
+    async def get_user_dynamics(self, uid: str) -> list:
         """刷新动态"""
         try:
-            u = user.User(int(uid))
-            dynamics = self.run_async(u.get_dynamics())
-            dynamic_list = dynamics.get("items", [])
+            u = user.User(int(uid), self.credential)
+            dynamic_list = await u.get_dynamics()
+            dynamics = dynamic_list.get("cards") or []
+            return dynamics
         except Exception as e:
             self.warnf(f"用户{uid}的动态获取失败: {e}")
-            dynamic_list = []
+        return []
 
-        if isinstance(dynamic_list, str):
-            self.warnf(dynamic_list)
-            return False
-
-        if dynamic_list:
-            dynamics = []
-            for dynamic_json in dynamic_list:
-                if dynamic_json.get("modules", {}).get("module_tag", {}).get("text") == "置顶":
-                    continue
-
-                if uid not in self.new_dynamics:
-                    self.new_dynamics[uid] = []
-
-                dynamic_type = dynamic_json.get("type")
-                modules = dynamic_json.get("modules", {})
-                module_dynamic = modules.get("module_dynamic", {})
-                
-                # 获取动态内容
-                content = ""
-                if module_dynamic.get("major", {}).get("opus"):
-                    content = module_dynamic["major"]["opus"].get("summary", {}).get("text", "")
-                elif module_dynamic.get("major", {}).get("article"):
-                    content = module_dynamic["major"]["article"].get("title", "")
-                elif module_dynamic.get("major", {}).get("none"):
-                    content = module_dynamic["major"]["none"].get("content", "")
-                
-                # 获取作者信息
-                author = modules.get("module_author", {}).get("name", "")
-
-                dynamics.append({
-                    "dynamic_id": dynamic_json["id_str"],
-                    "author": author,
-                    "dynamic_type": dynamic_type,
-                    "content": content
-                })
-
-            self.new_dynamics[uid] = dynamics
-            if uid not in self.past_dynamics:
-                self.past_dynamics[uid] = self.new_dynamics[uid].copy()
-
-            return True
-        return False
-
-    def get_new_dynamics(self, uid):
+    async def get_new_dynamics(self, uid: str) -> list:
         """获取新动态"""
-        dynamics = self.new_dynamics.get(uid, [])
         result = []
-
-        if dynamics:
-            for i in range(len(dynamics)):
-                dynamic_id = dynamics[i]["dynamic_id"]
-                if (dynamic_id not in [d["dynamic_id"] for d in self.past_dynamics.get(uid, [])] and 
-                    int(dynamic_id) >= int(self.past_dynamics[uid][-1]["dynamic_id"])):
-
-                    self.past_dynamics[uid].insert(i, dynamics[i])
-                    if HAS_PLAYWRIGHT:
-                        self.run_async(self.get_dynamic_screenshot(dynamic_id))
-
-                    result.append(dynamics[i])
-
-        return result
-
-    def get_deleted_dynamic(self, uid):
-        """获取删除的动态"""
-        result = []
-        if uid not in self.past_dynamics or uid not in self.new_dynamics:
+        dynamics = await self.get_user_dynamics(uid)
+        if not dynamics:
             return result
-
-        if not self.past_dynamics[uid] or not self.new_dynamics[uid]:
-            return result
-
-        for dynamic in self.past_dynamics[uid]:
-            dynamic_id = dynamic["dynamic_id"]
-            if (dynamic_id not in [d["dynamic_id"] for d in self.new_dynamics[uid]] and 
-                int(dynamic_id) >= int(self.new_dynamics[uid][-1]["dynamic_id"])):
-
+        for i, dynamic in enumerate(dynamics):
+            dynamic_id = dynamic["desc"]["dynamic_id"]
+            if dynamic_id in [d["desc"]["dynamic_id"] for d in self.dynamics.get(uid, {})]:
+                continue
+            if len(self.dynamics.get(uid, {})) == 0:
+                self.dynamics[uid].insert(i, dynamic)
                 result.append(dynamic)
-
+            elif int(dynamic_id) > int(self.dynamics[uid][-1]["desc"]["dynamic_id"]):
+                self.dynamics[uid].insert(i, dynamic)
+                result.append(dynamic)
         return result
 
-    def get_latest_dynamic(self, uid):
+    async def get_latest_dynamic(self, uid: str) -> dict | None:
         """获取最新动态"""
-        if uid not in self.new_dynamics or not self.new_dynamics[uid]:
-            self.refresh_dynamics(uid)
-
-        dynamics = self.new_dynamics.get(uid, [])
+        dynamics = await self.get_user_dynamics(uid)
         if dynamics:
-            if len(dynamics) != 1:
-                if int(dynamics[0]["dynamic_id"]) < int(dynamics[1]["dynamic_id"]):
-                    dynamics.pop(0)
-
-            dynamic_id = dynamics[0]["dynamic_id"]
-            dynamic_type = dynamics[0]["dynamic_type"]
-            author = dynamics[0]["author"]
-            content = dynamics[0]["content"]
-
-            if HAS_PLAYWRIGHT:
-                self.run_async(self.get_dynamic_screenshot(dynamic_id))
-
-            return [author, dynamic_id, dynamic_type, content]
-
+            return self.parse_dynamic(dynamics[0])
         return None
 
-    def get_live_status(self, uid):
+    async def get_live_info(self, uid: str):
         """获取直播状态"""
         try:
-            room_info = self.run_async(LiveRoom(uid).get_room_info())
+            u = user.User(int(uid), self.credential)
+            live_info = await u.get_live_info()
+            if live_info:
+                return live_info.get("live_room")
+            return None
         except Exception as e:
             self.warnf(f"获取直播状态失败: {e}")
-            room_info = None
 
-        if room_info:
-            online = room_info['live_status'] == 1
-            title = room_info['title']
-            cover = room_info['cover']
-            room_id = room_info['room_id']
-            live_time = room_info['live_time']
-            online_num = room_info['online']
-            keyframe = room_info['keyframe']
-
-            return [online, title, cover, room_id, live_time, online_num, keyframe]
-
-        return None
-
-    def get_user_info(self, uid):
+    async def get_user_simple_info(self, uid: str):
         """获取用户信息"""
         try:
             u = user.User(int(uid))
-            info = self.run_async(u.get_user_info())
-        except ResponseCodeException as e:
-            self.warnf(f"查询用户信息请求失败: {e}")
-            time.sleep(1)
-            try:
-                info = self.run_async(u.get_user_info())
-            except Exception as e:
-                self.warnf(f"查询用户信息请求失败: {e}")
-                return None
+            user_info = await u.get_user_info()
+            relation_info = await u.get_relation_info()
+            if user_info:
+                name = user_info["name"]
+                fans = relation_info["follower"]
+                avatar = user_info["face"]
+                return [uid, name, fans, avatar]
         except Exception as e:
             self.warnf(f"查询用户信息请求失败: {e}")
-            return None
-
-        if info:
-            name = str(info["name"])
-            fans = str(info["follower"])
-            avatar = str(info["face"])
-            return [uid, name, fans, avatar]
-
         return None
 
-    def get_uid(self, user_input):
+    def get_local_uid(self, user_input: str) -> int | None:
         """获取用户UID"""
         for owner_id in self.config:
-            if owner_id == "base_path" or owner_id == "data_file" or owner_id == "sessdata" or owner_id == "user_agent" or owner_id == "browser":
+            if owner_id == "env":
                 continue
-
-            for uid, info in self.config[owner_id]["sub"].items():
+            for uid, info in self.config[self.owner_id]["sub"].items():
                 if user_input == info["name"]:
                     return uid
-
         if re.search(r"^[0-9]+$", user_input):
             return user_input
-
         return None
 
-    def get_name_by_uid(self, uid):
+    def get_local_name(self, uid: str):
         """通过UID获取用户名"""
         for owner_id in self.config:
-            if owner_id == "base_path" or owner_id == "data_file" or owner_id == "sessdata" or owner_id == "user_agent" or owner_id == "browser":
+            if owner_id == "env":
                 continue
-
             if uid in self.config[owner_id]["sub"]:
                 return self.config[owner_id]["sub"][uid]["name"]
-
         return None
 
-    def get_info_by_name(self, name):
+    async def get_info_by_name(self, name: str):
         """通过名称获取信息"""
         try:
-            search_result = self.run_async(User.get_uid())
+            search_result = await search.search_by_type(
+                name, search.SearchObjectType.USER, search.OrderUser.FANS
+            )
             if search_result and "result" in search_result:
                 for result in search_result["result"]:
-                    if result.get("uname") == name:
-                        uid = str(result["mid"])
-                        name = result["uname"]
-                        fans = str(result["fans"])
-                        avatar = result["upic"]
-                        return [uid, name, fans, avatar]
+                    uid = result["mid"]
+                    name = result["uname"]
+                    fans = result["fans"]
+                    avatar = f"https:{result["upic"]}"
+                    return [uid, name, fans, avatar]
+            return None
         except Exception as e:
-            self.warnf(f"查询用户信息请求失败: {e}")
+            self.warnf(f"查询用户信息请求失败: {traceback.format_exc()}")
             return None
 
-        return None
-
-    def get_info(self, user_input):
+    async def get_info(self, user_input: str):
         """获取用户信息"""
-        uid = self.get_uid(user_input)
+        uid = self.get_local_uid(user_input)
         info = None
-
         if uid:
-            info = self.get_user_info(uid)
-
+            info =  await self.get_user_simple_info(uid)
         if info:
             self.update_follow_list_info(uid, {
                 "name": info[1], 
@@ -894,7 +736,7 @@ class Bilibili(Module):
                 "avatar": info[3]
             })
         else:
-            info = self.get_info_by_name(user_input)
+            info = await self.get_info_by_name(user_input)
             if info:
                 uid = info[0]
                 self.update_follow_list_info(uid, {
@@ -907,52 +749,105 @@ class Bilibili(Module):
 
         return info
 
-    def get_uid_list(self, get_type=None):
-        """获取UID列表"""
+    def get_uid_list(self, get_type: str) -> list:
+        """获取订阅的UID列表"""
         uid_list = []
         for owner_id in self.config:
-            if owner_id == "base_path" or owner_id == "data_file" or owner_id == "sessdata" or owner_id == "user_agent" or owner_id == "browser":
+            if owner_id == "env":
                 continue
-
             for uid, info in self.config[owner_id]["sub"].items():
-                if info["global_notice"]:
-                    if get_type == "dynamic" and info["dynamic_notice"]:
-                        uid_list.append(uid)
-                    elif get_type == "live" and info["live_notice"]:
-                        uid_list.append(uid)
-                    elif get_type == "fans" and info["fans_notice"]:
-                        uid_list.append(uid)
-
+                if not self.config[owner_id]["enable"]:
+                    continue
+                if get_type == "dynamic" and info["dynamic_notice"]:
+                    uid_list.append(uid)
+                elif get_type == "live" and info["live_notice"]:
+                    uid_list.append(uid)
+                elif get_type == "fans" and info["fans_notice"]:
+                    uid_list.append(uid)
         return uid_list
 
-    def _print_user_data(self, uid, info):
+    def get_notice_list(self, get_type: str, uid: str) -> list:
+        """获取订阅的owner_id列表"""
+        oid_list = []
+        for owner_id in self.config:
+            if owner_id == "env":
+                continue
+            for sub_uid, info in self.config[owner_id]["sub"].items():
+                if uid != sub_uid:
+                    continue
+                if not self.config[owner_id]["enable"]:
+                    continue
+                if get_type == "dynamic" and info["dynamic_notice"]:
+                    oid_list.append(owner_id)
+                elif get_type == "live" and info["live_notice"]:
+                    oid_list.append(owner_id)
+                elif get_type == "fans" and info["fans_notice"]:
+                    oid_list.append(owner_id)
+        return oid_list
+
+    def parse_user_info(self, uid: str, info):
         """打印用户数据"""
-        result = f"\n[CQ:image,file={info['avatar']},subType=1]"
-        result += f"\n用户名：{info['name']}"
+        result = f"\n[CQ:image,file={info["avatar"]},subType=1]"
+        result += f"\n用户名：{info["name"]}"
         result += f"\nUID：{uid}"
-        result += f"\n粉丝数：{info['fans']}"
+        result += f"\n粉丝数：{info["fans"]}"
         keyword = info["keyword"] if info["keyword"] != "" else "无(全部通知)"
         result += f"\n通知关键词：{keyword}"
         dynamic = "开启" if info["dynamic_notice"] else "关闭"
         result += f"\n动态通知：{dynamic}"
-        live = "开启" if info["live_notice"] else "关闭"
-        result += f"\n直播通知：{live}"
+        live_enable = "开启" if info["live_notice"] else "关闭"
+        result += f"\n直播通知：{live_enable}"
         fans = "开启" if info["fans_notice"] else "关闭"
         result += f"\n粉丝数通知：{fans}"
-        global_notice = "开启" if info["global_notice"] else "关闭"
-        result += f"\n全局通知：{global_notice}"
         return result
 
-    def run_async(self, coroutine):
-        """运行异步函数"""
-        future = asyncio.run_coroutine_threadsafe(coroutine, self.loop)
-        return future.result()
+    def parse_dynamic(self, dynamic: dict) -> dict:
+        """将动态解析为可读数据"""
+        dynamic_id = dynamic["desc"]["dynamic_id"]
+        dynamic_type = dynamic["desc"]["type"]
+        author = ""
+        text = ""
+        imgs = []
+        origin = None
+        if uname := dynamic.get("card", {}).get("user", {}).get("uname", ""):
+            author = uname
+        if name := dynamic.get("card", {}).get("user", {}).get("name", ""):
+            author = name
+        if content := dynamic.get("card", {}).get("item", {}).get("content", ""):
+            text = content
+            if origin_raw := dynamic.get("card", {}).get("item", {}).get("origin"):
+                origin_json = json.loads(origin_raw)
+                origin_content = origin_json.get("item", {}).get("description", {})
+                origin_pictures = origin_json.get("item", {}).get("pictures")
+                origin_imgs = [i.get("img_src") for i in origin_pictures if i.get("img_src")]
+                origin = {"content": origin_content, "imgs": origin_imgs}
+        elif description := dynamic.get("card", {}).get("item", {}).get("description", ""):
+            text = description
+        elif title := dynamic.get("card", {}).get("title", ""):
+            usr_action_txt = dynamic.get("display", {}).get("usr_action_txt", "")
+            text = f"{usr_action_txt} {title}"
+        if pic := dynamic.get("card", {}).get("pic"):
+            imgs.append(pic)
+        if first_frame := dynamic.get("card", {}).get("first_frame"):
+            imgs.append(first_frame)
+        if first_frame := dynamic.get("card", {}).get("first_frame"):
+            imgs.append(first_frame)
+        if pictures := dynamic.get("card", {}).get("item", {}).get("pictures"):
+            imgs += [i.get("img_src") for i in pictures if i.get("img_src")]
+        return {
+            "dynamic_id": dynamic_id,
+            "dynamic_type": dynamic_type,
+            "author": author,
+            "content": text,
+            "imgs": imgs,
+            "origin": origin,
+        }
 
-    def reply_back(self, owner_id, msg):
+    def reply_back(self, owner_id: str, msg: str):
         """回复消息"""
         if owner_id.startswith("g"):
             group_id = int(owner_id[1:])
-            self.robot.send_group_msg(group_id=group_id, message=msg)
+            send_msg(self.robot, "group", group_id, msg)
         else:
             user_id = int(owner_id[1:])
-            self.robot.send_private_msg(user_id=user_id, message=msg)
+            send_msg(self.robot, "private", user_id, msg)

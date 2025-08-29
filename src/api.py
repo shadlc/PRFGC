@@ -32,8 +32,6 @@ def get(robot: "Concerto", url):
     except requests.exceptions.InvalidURL:
         robot.errorf("无效的请求地址！")
         return {}
-    except Exception as e:
-        raise e
 
 def post(robot: "Concerto", url, data):
     try:
@@ -58,7 +56,7 @@ def post(robot: "Concerto", url, data):
 def connect_api(robot: "Concerto"):
     connected = False
     while not connected:
-        print(".", end="", flush=True)
+        robot.printf(".", end="", flush=True)
         try:
             result = get(robot, "/get_version_info")
         except requests.exceptions.ConnectionError:

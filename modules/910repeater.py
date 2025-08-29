@@ -72,14 +72,20 @@ class Repeater(Module):
         self.save_config()
         self.reply(msg)
 
-    @via(lambda self: self.group_at() and self.au(2) and self.match(r"^(不复读|禁止复读)\s+(\S+)$"))
+    @via(lambda self: self.group_at() and self.au(2) and self.match(r"^(不|禁止)?(复读|复读)\s+(\S+)$"))
     def exclude(self):
         """复读排除"""
-        text = self.match(r"^不复读\s+(\S+)$").groups()[0]
-        if not self.config[self.owner_id].get("exclude"):
-            self.config[self.owner_id]["exclude"] = []
-        self.config[self.owner_id]["exclude"].append(text)
-        self.save_config()
-        msg = f"成功将[{text}]添加到复读屏蔽词中!"
-        self.reply(msg)
+        text = self.match(r"^(不|禁止)?(复读|复读)\s+(\S+)$").groups()[2]
+        if self.match(r"(不|禁止)"):
+            self.config[self.owner_id]["exclude"].append(text)
+            self.save_config()
+            msg = f"成功将[{text}]添加到复读屏蔽词中!"
+            self.reply(msg)
+        else:
+            if text in self.config[self.owner_id]["exclude"]:
+                self.reply(f"[{text}]从未在复读屏蔽词中存在!")
+            else:
+                self.config[self.owner_id]["exclude"].remove(text)
+                msg = f"成功将[{text}]从复读屏蔽词中移除!"
+                self.reply(msg)
         self.printf(f"会话[{self.owner_id}]{msg}")

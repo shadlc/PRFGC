@@ -1,4 +1,5 @@
-"""机器人启动入口"""
+#!/usr/bin/python
+# 机器人启动入口，由外部方法调用最佳
 
 import os
 import threading
@@ -57,13 +58,15 @@ logger.addHandler(handler)
 
 # 启动主函数
 if __name__ == "__main__":
-    robot.printf(random.choice([Fore.BLACK,Fore.RED,Fore.GREEN,Fore.YELLOW,Fore.BLUE,Fore.MAGENTA,Fore.CYAN,Fore.WHITE]) + robot.start_info + Fore.RESET, flush=True)
-    robot.printf(f"正在连接[{robot.config.api_base}]API...", end="", console=False)
+    robot.printf(
+        random.choice([Fore.RED,Fore.GREEN,Fore.YELLOW,Fore.BLUE,Fore.MAGENTA,Fore.CYAN,Fore.WHITE])
+        + robot.start_info + Fore.RESET, flush=True)
+    robot.printf(f"正在连接API[{Fore.GREEN}{robot.config.api_base}{Fore.RESET}]...", end="", console=False)
     connect_api(robot)
-    robot.printf(f"已接入账号: {Fore.MAGENTA}{robot.self_name}({robot.self_id}){Fore.RESET}")
     robot.import_modules()
-    threading.Thread(target=robot.listening_msg, daemon=True).start()
-    threading.Thread(target=robot.listening_console, daemon=True).start()
+    robot.printf(f"已接入账号: {Fore.MAGENTA}{robot.self_name}({robot.self_id}){Fore.RESET}")
+    threading.Thread(target=robot.listening_msg, daemon=True, name="消息监听").start()
+    threading.Thread(target=robot.listening_console, daemon=True, name="键盘监听").start()
 
     while robot.is_running:
         time.sleep(0.1)

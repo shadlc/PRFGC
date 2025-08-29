@@ -209,9 +209,9 @@ class Message(Module):
                     send_msg(self.robot, {"msg_type": "private", "number": number, "msg": send})
                 )
             if result:
-                msg = f"发送消息{send}成功！"
+                msg = f"发送消息{send}成功!"
             else:
-                msg = "发送消息"
+                msg = f"发送消息{send}失败!"
         else:
             msg = self.match(r"说\s?(\S*)").groups()[0]
         self.reply(msg)

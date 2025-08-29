@@ -129,7 +129,7 @@ class ExecuteCmd(object):
         for request in self.robot.request_list:
             if re.search(r"^GET", request):
                 self.printf(
-                    f"{Fore.YELLOW}[GET]{Fore.RESET} {request.replace("GET", "")}{Fore.MAGENTA}{Fore.RESET}"
+                    f"{Fore.MAGENTA}[GET]{Fore.RESET} {request.replace("GET", "")}{Fore.MAGENTA}{Fore.RESET}"
                 )
             else:
                 self.printf(
@@ -409,46 +409,28 @@ class ExecuteCmd(object):
 
     def info(self, argv=""):
         info = get_version_info(self.robot)
+        modules = [f"{i.NAME}({i.ID})" for i in self.robot.modules.values()]
+        image_range = f"({self.robot.config.min_image_width}:{self.robot.config.max_image_width})"
         self.printf("=======API版本信息=======")
         self.printf(f"应用名：{Fore.YELLOW}{info["app_name"]}{Fore.RESET}")
         self.printf(f"版本号：{Fore.YELLOW}{info["app_version"]}{Fore.RESET}")
         self.printf(f"协议版本：{Fore.YELLOW}{info["protocol_version"]}{Fore.RESET}")
         self.printf("==========变量信息==========")
         self.printf(f"调试模式：{Fore.YELLOW}{self.robot.config.is_debug}{Fore.RESET}")
-        self.printf(
-            f"静默模式：{Fore.YELLOW}{self.robot.config.is_silence}{Fore.RESET}"
-        )
-        self.printf(
-            f"消息回复引用：{Fore.YELLOW}{self.robot.config.is_always_reply}{Fore.RESET}"
-        )
-        self.printf(
-            f"对接机器人：{Fore.YELLOW}{self.robot.self_name}({self.robot.self_id}){Fore.RESET}"
-        )
-        self.printf(
-            f"管理员列表：{Fore.YELLOW}{self.robot.config.admin_list}{Fore.RESET}"
-        )
-        self.printf(
-            f"黑名单列表：{Fore.YELLOW}{self.robot.config.blacklist}{Fore.RESET}"
-        )
-        self.printf(
-            f"对接群列表：{Fore.YELLOW}{self.robot.config.rev_group}{Fore.RESET}"
-        )
-        self.printf(
-            f"显示全部群消息：{Fore.YELLOW}{self.robot.config.is_show_all_msg}{Fore.RESET}"
-        )
-        self.printf(
-            f"已安装模块：{Fore.YELLOW}{[f"{i.NAME}({i.ID})" for i in self.robot.modules.values()]}{Fore.RESET}"
-        )
+        self.printf(f"静默模式：{Fore.YELLOW}{self.robot.config.is_silence}{Fore.RESET}")
+        self.printf(f"心跳包显示：{Fore.YELLOW}{self.robot.config.is_show_heartbeat}{Fore.RESET}")
+        self.printf(f"消息回复引用：{Fore.YELLOW}{self.robot.config.is_always_reply}{Fore.RESET}")
+        self.printf(f"报错消息反馈：{Fore.YELLOW}{self.robot.config.is_error_reply}{Fore.RESET}")
+        self.printf(f"对接机器人：{Fore.YELLOW}{self.robot.self_name}({self.robot.self_id}){Fore.RESET}")
+        self.printf(f"管理员列表：{Fore.YELLOW}{self.robot.config.admin_list}{Fore.RESET}")
+        self.printf(f"黑名单列表：{Fore.YELLOW}{self.robot.config.blacklist}{Fore.RESET}")
+        self.printf(f"对接群列表：{Fore.YELLOW}{self.robot.config.rev_group}{Fore.RESET}")
+        self.printf(f"显示全部群消息：{Fore.YELLOW}{self.robot.config.is_show_all_msg}{Fore.RESET}")
+        self.printf(f"已安装模块：{Fore.YELLOW}{modules}{Fore.RESET}")
         self.printf("=========字符画信息=========")
-        self.printf(
-            f"显示字符画：{Fore.YELLOW}{self.robot.config.is_show_image}{Fore.RESET}"
-        )
-        self.printf(
-            f"彩色显示模式：{Fore.YELLOW}{self.robot.config.image_color}{Fore.RESET}"
-        )
-        self.printf(
-            f"字符画宽度范围：{Fore.YELLOW}({self.robot.config.min_image_width}:{self.robot.config.max_image_width}){Fore.RESET}"
-        )
+        self.printf(f"显示字符画：{Fore.YELLOW}{self.robot.config.is_show_image}{Fore.RESET}")
+        self.printf(f"彩色显示模式：{Fore.YELLOW}{self.robot.config.image_color}{Fore.RESET}")
+        self.printf(f"字符画宽度范围：{Fore.YELLOW}{image_range}{Fore.RESET}")
         self.printf("==========临时字典==========")
         self.printf(f"用户字典：{Fore.YELLOW}{self.robot.user_dict}{Fore.RESET}")
         self.printf(f"群字典：{Fore.YELLOW}{self.robot.group_dict}{Fore.RESET}")
@@ -573,7 +555,7 @@ class ExecuteCmd(object):
     def read(self, argv=""):
         if re.search(r"(.+)", argv):
             msg_id = re.search(r"(.+)", argv).groups()[0]
-            msg_list = get_forward_msg(self.robot, msg_id)
+            msg_list = get_forward_msg(self.robot, msg_id).get("data", {}).get("messages")
             if msg_list:
                 group = 0
                 for msg in msg_list:
@@ -585,7 +567,7 @@ class ExecuteCmd(object):
                     msg_time = time.strftime(
                         "%m-%d %H:%M:%S", time.localtime(msg["time"])
                     )
-                    content = msg["content"]
+                    content = msg["raw_message"]
                     name = msg["sender"]["nickname"]
                     self.printf(
                         f"[{msg_time} {Fore.MAGENTA}{name}{Fore.RESET}] {Fore.MAGENTA}{Fore.RESET} {Fore.YELLOW}{content}{Fore.RESET}"
@@ -836,6 +818,20 @@ class ExecuteCmd(object):
                 self.warnf("心跳包接收显示已开启")
             else:
                 self.warnf("心跳包接收显示已关闭")
+        elif re.search(r"error_reply", argv):
+            if re.search(r"(true|True)", argv):
+                self.robot.config.is_error_reply = True
+            elif re.search(r"(false|False)", argv):
+                self.robot.config.is_error_reply = False
+            else:
+                self.robot.config.is_error_reply = (
+                    not self.robot.config.is_error_reply
+                )
+            self.robot.config.save("is_error_reply", self.robot.config.is_error_reply)
+            if self.robot.config.is_error_reply:
+                self.warnf("报错消息反馈已开启")
+            else:
+                self.warnf("报错消息反馈已关闭")
         elif re.search(r"reply", argv):
             if re.search(r"(true|True)", argv):
                 self.robot.config.is_always_reply = True
@@ -936,6 +932,7 @@ class ExecuteCmd(object):
             self.printf(f"{Fore.CYAN}set image size 数字 数字{Fore.RESET} 设置图片字符画最小/最大宽度")
             self.printf(f"{Fore.CYAN}set heartbeat (true/false){Fore.RESET} 设置接收心跳包是否显示")
             self.printf(f"{Fore.CYAN}set reply (true/false){Fore.RESET} 设置回复消息是否强制引用原文")
+            self.printf(f"{Fore.CYAN}set error_reply (true/false){Fore.RESET} 设置报错消息是否在QQ反馈")
 
     def silence(self, argv=""):
         self.robot.config.is_silence = not self.robot.config.is_silence
@@ -1008,7 +1005,7 @@ class ExecuteCmd(object):
         :param console: 是否增加一行<console>
         """
         self.robot.printf(
-            f"{Fore.YELLOW}[CMD]{Fore.RESET} {msg}",
+            f"{Fore.CYAN}[CMD]{Fore.RESET} {msg}",
             end=end,
             console=console,
             flush=flush,

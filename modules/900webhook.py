@@ -40,13 +40,13 @@ class Webhook(Module):
 
     def __init__(self, event, auth=0):
         super().__init__(event, auth)
-        if hasattr(self.robot, "webhook"):
+        if self.ID in self.robot.persist_mods:
             return
+        self.robot.persist_mods[self.ID] = self
         self.latest_warning_time = 0
         self.msg_deque = deque(maxlen=20)
         self.msg_imm_deque = deque(maxlen=10)
-        threading.Thread(target=self.hooking, daemon=True).start()
-        self.robot.webhook = self
+        threading.Thread(target=self.hooking, daemon=True, name=self.NAME).start()
 
     def hooking(self):
         self.printf(f"正在监听: {Fore.GREEN}{self.config["host"]}:{self.config["port"]}{Fore.RESET}")

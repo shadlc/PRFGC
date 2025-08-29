@@ -28,6 +28,7 @@ class Config:
             "is_always_reply": False,
             "is_show_all_msg": False,
             "is_show_image": False,
+            "is_error_reply": True,
             "image_color": "disabled",
             "min_image_width": 10,
             "max_image_width": 100,
@@ -49,6 +50,7 @@ class Config:
         self.is_always_reply = self.raw.get("is_always_reply", self.default["is_always_reply"])
         self.is_show_all_msg = self.raw.get("is_show_all_msg", self.default["is_show_all_msg"])
         self.is_show_image = self.raw.get("is_show_image", self.default["is_show_image"])
+        self.is_error_reply = self.raw.get("is_error_reply", self.default["is_error_reply"])
         self.image_color = self.raw.get("image_color", self.default["image_color"])
         self.min_image_width = self.raw.get("min_image_width", self.default["min_image_width"])
         self.max_image_width = self.raw.get("max_image_width", self.default["max_image_width"])
