@@ -17,6 +17,8 @@ class Notice(Module):
     CONFIG = "data.json"
     GLOBAL_CONFIG = None
     CONV_CONFIG = None
+    HANDLE_NOTICE = True
+    HANDLE_MESSAGE = False
 
     @via(
         lambda self: self.event.notice_type == "notify"

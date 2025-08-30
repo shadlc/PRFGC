@@ -5,7 +5,7 @@ import datetime
 import sqlite3
 import os
 import re
-from src.utils import Module, build_node, send_forward_msg, via, get_user_name
+from src.utils import Module, build_node, via, get_user_name
 
 class RPG(Module):
     """跑团功能模块"""
@@ -298,10 +298,7 @@ class RPG(Module):
                     if i == 0:
                         help_text += "\n"
         nodes = [build_node(help_text)]
-        if self.event.group_id:
-            send_forward_msg(self.robot, nodes, group_id=self.event.group_id, source="跑团功能帮助", hidden=True)
-        else:
-            send_forward_msg(self.robot, nodes, user_id=self.event.user_id, source="跑团功能帮助", hidden=True)
+        self.reply_forward(nodes, source="跑团功能帮助")
 
     @via(lambda self: self.au(2) and self.match(r"^\.r[0-9dD\+\-\s]*$"))
     def roll(self):

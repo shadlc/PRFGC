@@ -30,7 +30,7 @@ class Repeater(Module):
 
     @via(lambda self: not self.at_or_private() and self.au(2)
         and self.config[self.owner_id]["repeat"]
-        and self.event.msg not in self.config[self.owner_id].get("exclude")
+        and self.event.msg.replace(self.robot.at_info, "").strip() not in self.config[self.owner_id].get("exclude")
         and re.sub(r",url=.*?]","]", str(self.data.past_message)).count(f"'message': '{self.event.msg}") > 1
         and self.event.msg != "", success=False)
     def repeat(self):

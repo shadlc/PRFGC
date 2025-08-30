@@ -77,7 +77,8 @@ class Concerto:
         """监听来自qq的请求"""
         self.printf(f"正在监听: {Fore.GREEN}{self.config.host}:{self.config.port}{Fore.RESET}")
         while self.is_running:
-            self.handle_msg(receive_msg(self))
+            rev = receive_msg(self)
+            threading.Thread(target=self.handle_msg, args=(rev,), daemon=True).start()
 
     def handle_msg(self, rev):
         """消息处理接口主函数"""
@@ -144,12 +145,49 @@ class Concerto:
         elif event.post_type == "meta_event":
             return self.event(event)
 
-
     def handle_console(self, rev):
         """终端命令处理"""
         if rev:
             logger.info("%s", f"<console> {rev}")
         return ExecuteCmd(rev, self)
+
+    def module_handle(self, event: Event, handle_type: str, auth=3):
+        """具体模块处理"""
+        try:
+            if handle_type == "message":
+                for mod in self.modules.values():
+                    if mod.HANDLE_MESSAGE:
+                        if mod(event, auth).success:
+                            break
+            elif handle_type == "message_sent":
+                for mod in self.modules.values():
+                    if mod.HANDLE_MESSAGE_SENT:
+                        if mod(event, auth).success:
+                            break
+            elif handle_type == "notice":
+                for mod in self.modules.values():
+                    if mod.HANDLE_NOTICE:
+                        if mod(event, auth).success:
+                            break
+            elif handle_type == "request":
+                for mod in self.modules.values():
+                    if mod.HANDLE_REQUEST:
+                        if mod(event, auth).success:
+                            break
+            elif handle_type == "event":
+                for mod in self.modules.values():
+                    if mod.HANDLE_EVENT:
+                        if mod(event, auth).success:
+                            break
+        except Exception:
+            if event.group_id != "" and event.group_id not in self.config.rev_group:
+                return
+            if not self.config.is_error_reply:
+                return
+            if len(self.config.admin_list):
+                send_msg(self, "private", self.config.admin_list[0], f"%FATAL_ERROR%\n{simplify_traceback(traceback.format_exc())}")
+            else:
+                reply_event(self, event, f"%FATAL_ERROR%\n{simplify_traceback(traceback.format_exc())}")
 
     def message(self, event: Event, auth=3):
         """处理消息事件
@@ -176,32 +214,9 @@ class Concerto:
                     f"{Fore.MAGENTA}{event.group_name}({event.group_id}){Fore.RESET}内"
                     f"{Fore.MAGENTA}{event.user_name}({event.user_id}){Fore.RESET}: {event.msg}"
                 )
+        self.module_handle(event, "message", auth)
 
-        def execute_msg(event: Event, auth):
-            try:
-                for name, mod in self.modules.items():
-                    if name == "Notice":
-                        continue
-                    if mod(event, auth).success:
-                        break
-            except Exception:
-                if event.group_id != "" and event.group_id not in self.config.rev_group:
-                    return
-                if not self.config.is_error_reply:
-                    return
-                if self.config.is_debug:
-                    if len(self.config.admin_list):
-                        send_msg(self, "private", self.config.admin_list[0], f"%FATAL_ERROR%\n{traceback.format_exc()}")
-                    else:
-                        reply_event(self, event, f"%FATAL_ERROR%\n{traceback.format_exc()}")
-                else:
-                    if len(self.config.admin_list):
-                        send_msg(self, "private", self.config.admin_list[0], f"%FATAL_ERROR%\n{simplify_traceback(traceback.format_exc())}")
-                    else:
-                        reply_event(self, event, f"%FATAL_ERROR%\n{simplify_traceback(traceback.format_exc())}")
-        threading.Thread(target=execute_msg, args=[event, auth], daemon=True).start()
-
-    def message_sent(self, event: Event):
+    def message_sent(self, event: Event, auth=3):
         """处理发送消息事件
 
         Args:
@@ -214,6 +229,7 @@ class Concerto:
                 f"{Fore.MAGENTA}(msg_id:{event.msg_id}){Fore.RESET} "
                 f"{event.msg}"
             )
+        self.module_handle(event, "message_sent", auth)
 
     def notice(self, event: Event, auth=3):
         """处理通知事件
@@ -222,19 +238,9 @@ class Concerto:
             event (Event): 事件数据
             auth (int, optional): 权限等级
         """
+        self.module_handle(event, "notice", auth)
 
-        def execute_notice(event, auth):
-            try:
-                if self.modules.get("Notice"):
-                    self.modules["Notice"](event, auth)
-            except Exception:
-                if self.config.is_debug:
-                    reply_event(self, event, f"%FATAL_ERROR%{traceback.format_exc()}")
-                else:
-                    reply_event(self, event, f"%FATAL_ERROR%{simplify_traceback(traceback.format_exc())}")
-        threading.Thread(target=execute_notice, args=[event, auth], daemon=True).start()
-
-    def request(self, event: Event):
+    def request(self, event: Event, auth=3):
         """处理请求事件
 
         Args:
@@ -245,16 +251,17 @@ class Concerto:
         comment = event.raw.get("comment")
         if request_type == "friend":
             self.printf(
-                f"{Fore.CYAN}[NOTICE]{Fore.RESET}{Fore.MAGENTA}{event.user_name}({event.user_id}){Fore.RESET}发送好友请求"
+                f"{Fore.CYAN}[REQUEST]{Fore.RESET}{Fore.MAGENTA}{event.user_name}({event.user_id}){Fore.RESET}发送好友请求"
                 f"{Fore.MAGENTA}{comment}{Fore.RESET}，使用 {Fore.CYAN}add agree/deny 备注{Fore.RESET} 同意或拒绝此请求"
             )
         elif request_type == "group":
             self.printf(
-                f"{Fore.CYAN}[NOTICE]{Fore.RESET}{Fore.MAGENTA}{event.user_name}({event.user_id}){Fore.RESET}发送加群请求"
+                f"{Fore.CYAN}[REQUEST]{Fore.RESET}{Fore.MAGENTA}{event.user_name}({event.user_id}){Fore.RESET}发送加群请求"
                 f"{Fore.MAGENTA}{comment}{Fore.RESET}，使用 {Fore.CYAN}add agree/deny 理由{Fore.RESET} 同意或拒绝此请求"
             )
+        self.module_handle(event, "request", auth)
 
-    def event(self, event: Event):
+    def event(self, event: Event, auth=3):
         """处理元事件
 
         Args:
@@ -263,9 +270,8 @@ class Concerto:
         """
         if self.config.is_show_heartbeat:
             received = event.raw["status"]["stat"]["PacketReceived"]
-            self.printf(
-                f"{Fore.CYAN}[NOTICE]{Fore.RESET}接收到API的第{Fore.MAGENTA}{received}{Fore.RESET}个心跳包"
-            )
+            self.printf(f"{Fore.CYAN}[EVENT]{Fore.RESET}接收到API的第{Fore.MAGENTA}{received}{Fore.RESET}个心跳包")
+        self.module_handle(event, "event", auth)
 
     def import_modules(self):
         """导入modules内的模块"""
@@ -331,7 +337,7 @@ class Concerto:
         else:
             print(f"{prefix}{msg}", end=end, flush=flush)
         if console and not flush:
-            print(f"\r{Fore.GREEN}<console> {Fore.RESET} ", end="")
+            print(f"\r{Fore.GREEN}<console> {Fore.RESET}", end="")
         logger.info("%s", self.format_to_log(f"{prefix}{msg}"))
 
     def warnf(self, msg, end="\n", console=True):
@@ -348,7 +354,7 @@ class Concerto:
         print(msg, end=end)
         logger.info("%s", self.format_to_log(msg))
         if console:
-            print(f"\r{Fore.GREEN}<console> {Fore.RESET} ", end="")
+            print(f"\r{Fore.GREEN}<console> {Fore.RESET}", end="")
 
     def errorf(self, msg, end="\n", console=True):
         """
@@ -363,4 +369,4 @@ class Concerto:
         print(msg, end=end)
         logger.info("%s", self.format_to_log(msg))
         if console:
-            print(f"\r{Fore.GREEN}<console> {Fore.RESET} ", end="")
+            print(f"\r{Fore.GREEN}<console> {Fore.RESET}", end="")

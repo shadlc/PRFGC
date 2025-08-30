@@ -18,7 +18,7 @@ import traceback
 
 from typing import TYPE_CHECKING, Callable, Dict, Optional, Set
 
-import requests
+import httpx
 from PIL import Image
 from colorama import Fore, Style
 
@@ -155,7 +155,7 @@ def apply_formatter(logger: logging.Logger, mid: str):
             record.msg = f"{color}{record.msg}{reset}"
             return super().format(record)
     fmt = f"\r[%(asctime)s %(levelname)s] {Fore.CYAN}[{mid}]{Fore.RESET} %(message)s"
-    fmt += f"\n\r{Fore.GREEN}<console> {Fore.RESET} "
+    fmt += f"\n\r{Fore.GREEN}<console> {Fore.RESET}"
     formatter = ColorFormatter(fmt=fmt, datefmt="%H:%M:%S")
     logger.propagate = False
     if len(logger.handlers) == 0:
@@ -257,7 +257,7 @@ def msg_img2char(config: Config, msg: str):
     matches = re.findall(r"(\[CQ:image.*?url=([^,]*).*\])", msg)
     for cq, url in matches:
         try:
-            data = requests.get(url, timeout=3)
+            data = httpx.Client().get(url, timeout=3)
             img = Image.open(io.BytesIO(data.content)).convert("RGB")
             w, h = img.size
             ratio = h / float(w)
@@ -493,7 +493,7 @@ def get_forward_msg(robot: "Concerto", msg_id: str):
     resp_dict = {"message_id": msg_id}
     return api.get_forward_msg(robot, resp_dict)
 
-def send_forward_msg(robot: "Concerto", nodes: dict, group_id=None, user_id=None, source=None, hidden=False):
+def send_forward_msg(robot: "Concerto", nodes: list, group_id=None, user_id=None, source=None, hidden=False):
     """
     发送转发消息
     :param robot: 机器人类
@@ -518,6 +518,7 @@ def send_forward_msg(robot: "Concerto", nodes: dict, group_id=None, user_id=None
             get_msg(robot, result["data"]["message_id"])["data"]
         )
     return result
+
 
 def send_private_forward_msg(robot: "Concerto", node: dict, user_id: str):
     """
@@ -559,7 +560,7 @@ def get_group_msg_history(robot: "Concerto", group_id: str):
     :return: 消息json信息
     """
     resp_dict = {"group_id": group_id}
-    return get_group_msg_history(robot, resp_dict)
+    return api.get_group_msg_history(robot, resp_dict)
 
 def reply_add(robot: "Concerto", raw: dict, accept: str, msg: str):
     """
@@ -996,6 +997,12 @@ class Module:
     CONV_CONFIG = None
     AUTO_INIT = None
 
+    HANDLE_MESSAGE = True
+    HANDLE_MESSAGE_SENT = False
+    HANDLE_NOTICE = False
+    HANDLE_REQUEST = False
+    HANDLE_META_EVENT = False
+
     def __init__(self, event: Event, auth: int=0):
         self.name = self.__class__.NAME
         self.success = False
@@ -1009,7 +1016,7 @@ class Module:
         self.init_config()
         if not self.premise():
             return
-        self.robot.loop.run_until_complete(self.activate())
+        asyncio.run_coroutine_threadsafe(self.activate(), self.robot.loop)
 
     def premise(self):
         """前置条件"""
@@ -1040,8 +1047,8 @@ class Module:
 
     def match(self, pattern: str):
         """消息规则匹配"""
-        msg = self.event.msg.replace(self.robot.at_info, "")
-        return re.search(pattern, msg.strip())
+        msg = self.event.msg.replace(self.robot.at_info, "").strip()
+        return re.search(pattern, msg)
 
     def is_self_send(self):
         """判断是不是自己发送的数据"""
@@ -1074,6 +1081,8 @@ class Module:
             self.owner_id = f"u{self.robot.self_id}"
         # 读取指定会话的数据与配置文件
         self.data = self.robot.data.get(self.owner_id)
+        if self.CONV_CONFIG is None:
+            return
         if self.owner_id not in self.config:
             self.config[self.owner_id] = {}
         self.CONV_CONFIG = self.CONV_CONFIG or {}
@@ -1096,6 +1105,13 @@ class Module:
         if self.robot.config.is_always_reply:
             reply = True
         return reply_event(self.robot, self.event, msg, reply=reply, force=force)
+
+    def reply_forward(self, nodes: list, source=None, hidden=True):
+        """快捷回复转发消息"""
+        if self.event.group_id:
+            send_forward_msg(self.robot, nodes, group_id=self.event.group_id, source=source, hidden=hidden)
+        else:
+            send_forward_msg(self.robot, nodes, user_id=self.event.user_id, source=source, hidden=hidden)
 
     def printf(self, msg, end="\n", console=True, flush=False):
         """

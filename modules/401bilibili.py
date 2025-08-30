@@ -8,14 +8,14 @@ import threading
 import time
 import traceback
 
-from bilibili_api import Credential, search, sync, user
+from bilibili_api import Credential, NetworkException, search, sync, user
 try:
     from playwright.async_api import async_playwright
     HAS_PLAYWRIGHT = True
 except ImportError:
     HAS_PLAYWRIGHT = False
 
-from src.utils import MiniCron, Module, send_msg, via
+from src.utils import MiniCron, Module, build_node, send_msg, via
 
 class Bilibili(Module):
     """哔哩哔哩模块"""
@@ -87,8 +87,11 @@ class Bilibili(Module):
 
     def init_task(self, interval=60):
         """初始化任务"""
-        time.sleep(5)
-        self.printf("实时检测开启~")
+        time.sleep(10)
+        dynamic = len(self.get_uid_list("dynamic"))
+        live = len(self.get_uid_list("live"))
+        fans = len(self.get_uid_list("fans"))
+        self.printf(f"实时检测开启~ 共监控{dynamic}个用户动态, {live}个用户直播, {fans}个用户粉丝数")
         async def dynamic_loop():
             while True:
                 try:
@@ -129,23 +132,25 @@ class Bilibili(Module):
     @via(lambda self: self.at_or_private() and self.au(3) and self.match(r"^关注列表$"))
     async def show_follow_list(self):
         """显示关注列表"""
+        title = ""
+        nodes = []
         follow_list = self.config[self.owner_id]["sub"]
         if follow_list:
             if self.event.group_id:
-                msg = "本群的关注列表"
+                title = "本群的关注列表"
             else:
-                msg = "你的关注列表"
+                title = "你的关注列表"
             for uid, info in follow_list.items():
                 user_info =  await self.get_user_simple_info(uid)
                 if user_info:
                     info["name"] = user_info[1]
                     info["fans"] = user_info[2]
                     info["avatar"] = user_info[3]
-                msg += "\n===================="
-                msg += self.parse_user_info(uid, info)
+                nodes.append(build_node(self.parse_user_info(uid, info)))
         else:
             msg = "这里还未拥有关注列表，请管理员添加吧~"
-        self.reply(msg)
+            self.reply(msg)
+        self.reply_forward(nodes, source=title)
 
     @via(lambda self: self.at_or_private() and self.au(2) and self.match(r"^关注\s?(\S+)$"))
     async def subscribe(self):
@@ -469,6 +474,7 @@ class Bilibili(Module):
             if uid not in self.dynamics or len(self.dynamics[uid]) == 0:
                 dynamics = await self.get_user_dynamics(uid)
                 if len(dynamics) == 0:
+                    await asyncio.sleep(1)
                     continue
                 self.printf(f"已初始化{name}({uid})的动态共{len(dynamics)}条")
                 self.dynamics[uid] = dynamics
@@ -476,6 +482,7 @@ class Bilibili(Module):
                 continue
             dynamics = await self.get_new_dynamics(uid)
             if not dynamics:
+                await asyncio.sleep(1)
                 continue
             self.printf(f"{name}({uid})发布了新动态{len(dynamics)}条")
             type_msg = {
@@ -515,14 +522,15 @@ class Bilibili(Module):
         for uid in uid_list:
             info = await self.get_live_info(uid)
             if not info:
-                return
+                await asyncio.sleep(1)
+                continue
             status = info.get("liveStatus")
             title = info.get("title")
             cover = info.get("cover")
             room_id = info.get("roomid")
             if self.live_status.get(uid, 0) == status:
+                await asyncio.sleep(1)
                 continue
-
             self.live_status[uid] = status
             if not status:
                 return
@@ -535,6 +543,7 @@ class Bilibili(Module):
                 if cover:
                     msg += f"\n[CQ:image,file={cover}]"
                 self.reply_back(owner_id, msg)
+                await asyncio.sleep(1)
             await asyncio.sleep(interval)
 
     async def fans_check(self, interval=10):
@@ -548,8 +557,8 @@ class Bilibili(Module):
                 uid, name, fans, avatar = info
                 past_fans = int(self.get_follow_list_info(uid, "fans"))
                 if past_fans == fans:
+                    await asyncio.sleep(1)
                     continue
-
                 notice_list = self.get_notice_list("fans", uid)
                 for owner_id in notice_list:
                     msg = f"\n[CQ:image,file={avatar}]"
@@ -593,9 +602,11 @@ class Bilibili(Module):
                         else:
                             msg += "统计学上来说这很正常"
                     else:
+                        await asyncio.sleep(1)
                         continue
                     self.update_follow_list_info(uid, {"fans": fans})
                     self.reply_back(owner_id, msg)
+                    await asyncio.sleep(1)
             await asyncio.sleep(interval)
 
     def get_follow_list_info(self, uid: str, key):
@@ -624,13 +635,18 @@ class Bilibili(Module):
 
     async def get_user_dynamics(self, uid: str) -> list:
         """刷新动态"""
+        name = self.get_local_name(uid)
         try:
             u = user.User(int(uid), self.credential)
             dynamic_list = await u.get_dynamics()
             dynamics = dynamic_list.get("cards") or []
             return dynamics
-        except Exception as e:
-            self.warnf(f"用户{uid}的动态获取失败: {e}")
+        except NetworkException as e:
+            self.warnf(f"获取{name}({uid})的动态异常 {e.status}")
+        except asyncio.TimeoutError:
+            self.warnf(f"获取{name}({uid})的动态超时")
+        except Exception:
+            self.warnf(f"用户{name}({uid})的动态获取失败: {traceback.format_exc()}")
         return []
 
     async def get_new_dynamics(self, uid: str) -> list:
@@ -660,17 +676,23 @@ class Bilibili(Module):
 
     async def get_live_info(self, uid: str):
         """获取直播状态"""
+        name = self.get_local_name(uid)
         try:
             u = user.User(int(uid), self.credential)
             live_info = await u.get_live_info()
             if live_info:
                 return live_info.get("live_room")
             return None
-        except Exception as e:
-            self.warnf(f"获取直播状态失败: {e}")
+        except NetworkException as e:
+            self.warnf(f"获取{name}({uid})的动态异常 {e.status}")
+        except asyncio.TimeoutError:
+            self.warnf(f"获取{name}({uid})直播状态超时")
+        except Exception:
+            self.warnf(f"获取{name}({uid})的直播状态失败: {traceback.format_exc()}")
 
     async def get_user_simple_info(self, uid: str):
         """获取用户信息"""
+        name = self.get_local_name(uid)
         try:
             u = user.User(int(uid))
             user_info = await u.get_user_info()
@@ -680,8 +702,12 @@ class Bilibili(Module):
                 fans = relation_info["follower"]
                 avatar = user_info["face"]
                 return [uid, name, fans, avatar]
-        except Exception as e:
-            self.warnf(f"查询用户信息请求失败: {e}")
+        except NetworkException as e:
+            self.warnf(f"获取{name}({uid})的动态异常 {e.status}")
+        except asyncio.TimeoutError:
+            self.warnf(f"获取{name}({uid})的用户信息超时")
+        except Exception:
+            self.warnf(f"查询{name}({uid})的用户信息请求失败: {traceback.format_exc()}")
         return None
 
     def get_local_uid(self, user_input: str) -> int | None:
@@ -696,7 +722,7 @@ class Bilibili(Module):
             return user_input
         return None
 
-    def get_local_name(self, uid: str):
+    def get_local_name(self, uid: str) -> str | None:
         """通过UID获取用户名"""
         for owner_id in self.config:
             if owner_id == "env":
@@ -705,7 +731,7 @@ class Bilibili(Module):
                 return self.config[owner_id]["sub"][uid]["name"]
         return None
 
-    async def get_info_by_name(self, name: str):
+    async def get_info_by_name(self, name: str) -> list | None:
         """通过名称获取信息"""
         try:
             search_result = await search.search_by_type(
@@ -719,11 +745,11 @@ class Bilibili(Module):
                     avatar = f"https:{result["upic"]}"
                     return [uid, name, fans, avatar]
             return None
-        except Exception as e:
+        except Exception:
             self.warnf(f"查询用户信息请求失败: {traceback.format_exc()}")
             return None
 
-    async def get_info(self, user_input: str):
+    async def get_info(self, user_input: str) -> list | None:
         """获取用户信息"""
         uid = self.get_local_uid(user_input)
         info = None
@@ -731,8 +757,8 @@ class Bilibili(Module):
             info =  await self.get_user_simple_info(uid)
         if info:
             self.update_follow_list_info(uid, {
-                "name": info[1], 
-                "fans": info[2], 
+                "name": info[1],
+                "fans": info[2],
                 "avatar": info[3]
             })
         else:
@@ -740,13 +766,12 @@ class Bilibili(Module):
             if info:
                 uid = info[0]
                 self.update_follow_list_info(uid, {
-                    "name": info[1], 
-                    "fans": info[2], 
+                    "name": info[1],
+                    "fans": info[2],
                     "avatar": info[3]
                 })
             else:
                 return None
-
         return info
 
     def get_uid_list(self, get_type: str) -> list:
@@ -785,9 +810,9 @@ class Bilibili(Module):
                     oid_list.append(owner_id)
         return oid_list
 
-    def parse_user_info(self, uid: str, info):
+    def parse_user_info(self, uid: str, info) -> str:
         """打印用户数据"""
-        result = f"\n[CQ:image,file={info["avatar"]},subType=1]"
+        result = f"[CQ:image,file={info["avatar"]},subType=1]"
         result += f"\n用户名：{info["name"]}"
         result += f"\nUID：{uid}"
         result += f"\n粉丝数：{info["fans"]}"
@@ -843,11 +868,11 @@ class Bilibili(Module):
             "origin": origin,
         }
 
-    def reply_back(self, owner_id: str, msg: str):
+    def reply_back(self, owner_id: str, msg: str) -> dict:
         """回复消息"""
         if owner_id.startswith("g"):
             group_id = int(owner_id[1:])
-            send_msg(self.robot, "group", group_id, msg)
+            return send_msg(self.robot, "group", group_id, msg)
         else:
             user_id = int(owner_id[1:])
-            send_msg(self.robot, "private", user_id, msg)
+            return send_msg(self.robot, "private", user_id, msg)

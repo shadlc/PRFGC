@@ -49,6 +49,22 @@ url = "https://mirrors.aliyun.com/pypi/simple"
 reference = "ali"
 
 [[package]]
+name = "httpcore"
+version = "1.0.9"
+description = ""
+optional = false
+python-versions = "*"
+files = [
+    {file = "httpcore-1.0.9-py3-none-any.whl", hash = "sha256:2d400746a40668fc9dec9810239072b40b4484b640a8c38fd654a024c7a1bf55"},
+    {file = "httpcore-1.0.9.tar.gz", hash = "sha256:6e34463af53fd2ab5d807f399a9b45ea31c3dfa2276f15a2c3f00afff6e176e8"},
+]
+
+[package.source]
+type = "legacy"
+url = "https://mirrors.aliyun.com/pypi/simple"
+reference = "ali"
+
+[[package]]
 name = "httpx"
 version = "0.28.1"
 description = ""
@@ -225,23 +241,7 @@ type = "legacy"
 url = "https://mirrors.aliyun.com/pypi/simple"
 reference = "ali"
 
-[[package]]
-name = "requests"
-version = "2.32.5"
-description = ""
-optional = false
-python-versions = "*"
-files = [
-    {file = "requests-2.32.5-py3-none-any.whl", hash = "sha256:2462f94637a34fd532264295e186976db0f5d453d1cdd31473c85a6a161affb6"},
-    {file = "requests-2.32.5.tar.gz", hash = "sha256:dbba0bac56e100853db0ea71b82b4dfd5fe2bf6d3754a8893c3af500cec7d7cf"},
-]
-
-[package.source]
-type = "legacy"
-url = "https://mirrors.aliyun.com/pypi/simple"
-reference = "ali"
-
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.12"
-content-hash = "63462fd72ca4eac3c8d7b020f9e1bed55d67eee51a4b1b1a420dcab3a195d366"
+content-hash = "0e46bae6bc34702560a13e889a4bd5757ca3cfa5f75049369f123b27cb757ed4"

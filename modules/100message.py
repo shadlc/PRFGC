@@ -3,9 +3,9 @@
 import time
 
 from colorama import Fore
-import requests
+import httpx
 from src.api import del_msg, get_version_info, send_msg
-from src.utils import Module, get_group_name, get_user_name, status_ok, via, build_node, send_forward_msg
+from src.utils import Module, get_group_name, get_user_name, status_ok, via, build_node
 
 
 class Message(Module):
@@ -26,7 +26,7 @@ class Message(Module):
         2: [
             "测试 | 进行基准测试",
             "语音 [文字] | 文字转语音",
-        ], 
+        ],
         3: [
             "帮助 | 展示机器人全部可用功能",
             "权限 | 查看权限等级",
@@ -59,10 +59,7 @@ class Message(Module):
                 help_text = f"{mod.NAME}帮助\n\n{help_text}"
                 help_list.append(build_node(help_text.strip()))
         nodes = help_list
-        if self.event.group_id:
-            send_forward_msg(self.robot, nodes, group_id=self.event.group_id, source="ConcertBot HELP", hidden=True)
-        else:
-            send_forward_msg(self.robot, nodes, user_id=self.event.user_id, source="ConcertBot HELP", hidden=True)
+        self.reply_forward(nodes, source="ConcertBot HELP")
 
     @via(lambda self: self.at_or_private() and self.au(1) and self.match(r"^(增加|添加|删除|取消)?\s?管理员"))
     def admin(self):
@@ -245,17 +242,16 @@ class Message(Module):
             url = f"https://api.ip138.com/ip/?ip={ip}"
             msg = ""
             try:
-                self.printf(url, str(headers))
-                data = requests.post(url, headers=headers, timeout=5).json()
+                data = httpx.Client().get(url, headers=headers, timeout=3).json()
                 if data.get("ret") != "ok":
                     msg = f"ip138.com返回为空: {data.get("msg")}"
                 else:
                     ip = data.get("ip")
                     location = data.get("data")
                     msg = f"IP地址: {ip}\n地区: {" ".join([i for i in location[:-4]])}\n归属: {location[-3]}\n邮编: {location[-2]}\n区号: {location[-1]}"
-            except requests.exceptions.JSONDecodeError as e:
+            except httpx.DecodingError as e:
                 msg = f"返回解析错误！{e}"
-            except requests.ConnectionError as e:
+            except httpx.ConnectError as e:
                 msg = f"ip138.com服务器请求错误！{e}"
         else:
             thing = self.match(r"^测试(.*)").groups()[0]

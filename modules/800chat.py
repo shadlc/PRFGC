@@ -217,10 +217,7 @@ class Chat(Module):
                 uid = self.event.user_id
             msg_list.append(build_node(content, user_id=uid, nickname=name))
         if msg_list:
-            if self.event.group_id:
-                send_forward_msg(self.robot, msg_list, group_id=self.event.group_id)
-            else:
-                send_forward_msg(self.robot, msg_list, user_id=self.event.user_id)
+            self.reply_forward(msg_list, hidden=False)
         else:
             msg = "生成转发消息错误~"
             self.reply(msg)

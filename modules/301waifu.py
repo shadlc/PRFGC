@@ -8,8 +8,9 @@ import datetime
 import re
 import traceback
 
-import requests
 import urllib
+
+import httpx
 from src.utils import Module, via, get_user_name
 
 class Waifu(Module):
@@ -35,7 +36,7 @@ class Waifu(Module):
         "pic_url": "",
     }
     CONV_CONFIG = {
-        "enable": False,
+        "enable": True,
         "add_auth": 1,
         "waifu": {}
     }
@@ -57,7 +58,7 @@ class Waifu(Module):
         msg = f"抽老婆功能已{text}"
         self.config[self.owner_id]["enable"] = flag
         self.save_config()
-        self.reply(msg)
+        self.reply(msg, reply=True)
 
     @via(lambda self: self.au(2) and self.config[self.owner_id].get("enable") and self.match(r"^抽取?老婆$"))
     def draw_waifu(self):
@@ -78,7 +79,7 @@ class Waifu(Module):
         self.save_config()
         waifu_name = waifu.split(".")[0]
         waifu_img = self.get_waifu_file(waifu)
-        self.reply(f"你今天的二次元老婆是{waifu_name}哒~\n[CQ:image,file=base64://{waifu_img}]")
+        self.reply(f"你今天的二次元老婆是{waifu_name}哒~\n[CQ:image,file=base64://{waifu_img}]", reply=True)
 
     @via(lambda self: self.au(2) and self.config[self.owner_id].get("enable") and self.match(r"查寻?老婆"))
     def check_waifu(self):
@@ -119,10 +120,10 @@ class Waifu(Module):
                 return self.reply("请附带二次元老婆图片~")
             url = html.unescape(ret.groups()[1])
             self.save_waifu(url, waifu_name)
-            self.reply(f"{waifu_name}已增加~")
+            self.reply(f"{waifu_name}已增加~", reply=True)
         except Exception:
             self.errorf(traceback.format_exc())
-            self.reply(f"{waifu_name}添加失败!")
+            self.reply(f"{waifu_name}添加失败!", reply=True)
 
     def get_path(self):
         """获取二次元老婆路径"""
@@ -154,10 +155,10 @@ class Waifu(Module):
     def save_waifu(self, url: str, name: str):
         """保存二次元老婆"""
         pic_path = self.get_path()
-        with requests.get(url, stream=True, timeout=5) as r:
-            r.raise_for_status()
-            fmt = imghdr.what(None, h=r.content)
-            with open(os.path.join(pic_path, f"{name}.{fmt}"), "wb") as f:
-                for chunk in r.iter_content(chunk_size=8192):
-                    if chunk:
-                        f.write(chunk)
+        data = httpx.Client().get(url, timeout=3)
+        data.raise_for_status()
+        fmt = imghdr.what(None, h=data.content)
+        file_path = os.path.join(pic_path, f"{name}.{fmt}")
+        with open(file_path, "wb") as f:
+            f.write(data)
+                    

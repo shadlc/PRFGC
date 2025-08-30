@@ -62,6 +62,7 @@ class ExecuteCmd(object):
             "history": "查看历史消息",
             "info": "查看API版本和相关信息",
             "like": "对用户主页点赞",
+            "llm": "调用首个配置的大语言模型生成文本(如果可以)",
             "msg": "发送私聊消息",
             "notice": "发送群公告",
             "ocr": "识别图片中的文字",
@@ -204,9 +205,9 @@ class ExecuteCmd(object):
     def exit(self, argv=""):
         result = bot_exit(self.robot)
         if status_ok(result):
-            self.printf(f"机器人已退出")
+            self.printf(f"账号已退出")
         else:
-            self.warnf(f"机器人退出失败")
+            self.warnf(f"账号退出失败")
 
     def get(self, argv=""):
         if re.search(r"user\s+(\d+)", argv):
@@ -237,21 +238,21 @@ class ExecuteCmd(object):
                 self.printf(f"查无此号！{result.get("message")}")
         elif re.search(r"group\s+(\d+)", argv):
             group_id = re.search(r"group\s+(\d+)", argv).groups()[0]
-            result = get_group_info(self.robot, {"group_id": group_id})
+            result = get_group_info(self.robot, group_id)
             if status_ok(result):
-                result = result["data"]
+                data = result.get("data")
                 self.printf(
-                    f"群{Fore.MAGENTA}{result.get("group_name")}({group_id}){Fore.RESET}信息"
+                    f"群{Fore.MAGENTA}{data.get("group_name")}({group_id}){Fore.RESET}信息"
                 )
-                self.printf(f"群简介：{result.get("fingerMemo", "")}")
+                self.printf(f"群简介：{data.get("fingerMemo", "")}")
                 self.printf(
-                    f"群创建时间：{time.strftime("%Y年%m月%d日 %H:%M:%S", time.localtime(result.get("groupCreateTime", 0)))}"
+                    f"群创建时间：{time.strftime("%Y年%m月%d日 %H:%M:%S", time.localtime(data.get("groupCreateTime", 0)))}"
                 )
-                self.printf(f"群等级：{result.get("groupGrade", "未知")}级")
-                self.printf(f"群人数：{result.get("member_count")}人")
-                self.printf(f"入群问题：{result.get("groupQuestion", "无")}")
+                self.printf(f"群等级：{data.get("groupGrade", "未知")}级")
+                self.printf(f"群人数：{data.get("member_count")}人")
+                self.printf(f"入群问题：{data.get("groupQuestion", "无")}")
             else:
-                self.printf(f"查无此群！{result.get("message")}")
+                self.printf(f"查无此群！{data.get("message")}")
         else:
             self.printf(
                 f"请使用 {Fore.CYAN}get user/group QQ号/群号{Fore.RESET} 获取信息"
@@ -358,54 +359,50 @@ class ExecuteCmd(object):
 
     def history(self, argv=""):
         if re.search(r"(\d+)$", argv):
-            msg_id = re.search(r"(\d+)$", argv).groups()[0]
-            if ("g" + msg_id) in self.robot.data:
-                self.printf(
-                    f"群{Fore.MAGENTA}{get_group_name(self.robot, str(msg_id))}({msg_id}){Fore.RESET}中的历史消息:"
-                )
-                past_msg = get_group_msg_history(self.robot, msg_id)
+            uid = re.search(r"(\d+)$", argv).groups()[0]
+            if ("u" + uid) in self.robot.data:
+                self.printf(f"与{Fore.MAGENTA}{get_user_name(self.robot, uid)}{uid}{Fore.RESET}的历史消息:")
+                past_msg = self.robot.data["u" + uid].past_message
                 for one_msg in past_msg:
-                    msg_time = time.strftime(
-                        "%m-%d %H:%M:%S", time.localtime(one_msg["time"])
-                    )
+                    msg_time = time.strftime("%m-%d %H:%M:%S", time.localtime(one_msg["time"]))
+                    msg = one_msg["raw_message"]
+                    msg_id = one_msg["message_id"]
+                    self.printf(f"[{msg_time}] {Fore.MAGENTA}(msg_id:{msg_id}){Fore.RESET} {msg}")
+            else:
+                data = get_group_msg_history(self.robot, uid).get("data")
+                if not data:
+                    self.printf(f"您未加入群{Fore.MAGENTA}{get_group_name(self.robot, str(uid))}({uid}){Fore.RESET}")
+                    return
+                self.printf(f"群{Fore.MAGENTA}{get_group_name(self.robot, str(uid))}({uid}){Fore.RESET}中的历史消息:")
+                past_msg = data.get("messages") 
+                for one_msg in past_msg:
+                    msg_time = time.strftime("%m-%d %H:%M:%S", time.localtime(one_msg["time"]))
                     msg_id = one_msg["message_id"]
                     name = get_user_name(self.robot, one_msg["user_id"])
-                    msg = one_msg["raw_message"]
-                    self.printf(
-                        f"[{msg_time} {name}] {Fore.MAGENTA}(message_id:{msg_id}){Fore.RESET} {Fore.YELLOW}{msg}{Fore.RESET}"
-                    )
-            elif ("u" + msg_id) in self.robot.data:
-                self.printf(
-                    f"与{Fore.MAGENTA}{get_user_name(self.robot, msg_id)}{msg_id}{Fore.RESET}的历史消息:"
-                )
-                past_msg = self.robot.data["u" + msg_id].past_message
-                for one_msg in past_msg:
-                    msg_time = time.strftime(
-                        "%m-%d %H:%M:%S", time.localtime(one_msg["time"])
-                    )
-                    msg = one_msg["raw_message"]
-                    self.printf(f"[{msg_time}] {Fore.YELLOW}{msg}{Fore.RESET}")
-            else:
-                self.printf(f"没有与{Fore.MAGENTA}{msg_id}{Fore.RESET}的消息记录")
+                    msg = one_msg["raw_message"] or "[已撤回]"
+                    self.printf(f"[{msg_time} {name}] "
+                                f"{Fore.MAGENTA}(msg_id:{msg_id}){Fore.RESET} {msg}")
         elif re.search(r"self", argv):
             if len(self.robot.self_message):
                 self.printf(f"自己发送的历史消息:")
                 past_msg = self.robot.self_message
                 for one_msg in past_msg:
-                    msg_time = time.strftime(
-                        "%m-%d %H:%M:%S", time.localtime(one_msg["time"])
-                    )
+                    msg_time = time.strftime("%m-%d %H:%M:%S", time.localtime(one_msg["time"]))
                     msg = one_msg["message"]
                     msg_id = one_msg["message_id"]
-                    self.printf(
-                        f"[{msg_time}] {Fore.MAGENTA}(message_id:{msg_id}){Fore.RESET} {Fore.YELLOW}{msg}{Fore.RESET}"
-                    )
+                    uname = uid = ""
+                    if group_id := one_msg.get("group_id"):
+                        uid = group_id
+                        uname = get_group_info(self.robot, group_id).get("data").get("group_name")
+                    else:
+                        uid = one_msg.get("user_id")
+                        uname = get_user_name(self.robot, uid)
+                    self.printf(f"[{msg_time} TO {uname}({uid})] "
+                                f"{Fore.MAGENTA}(msg_id:{msg_id}){Fore.RESET} {msg}")
             else:
                 self.printf(f"没有自己发送的历史消息")
         else:
-            self.printf(
-                f"请使用 {Fore.CYAN}history QQ号/群号/self{Fore.RESET} 获取历史消息"
-            )
+            self.printf(f"请使用 {Fore.CYAN}history QQ号/群号/self{Fore.RESET} 获取历史消息")
 
     def info(self, argv=""):
         info = get_version_info(self.robot)
@@ -456,6 +453,21 @@ class ExecuteCmd(object):
                 )
         else:
             self.printf(f"请使用 {Fore.CYAN}like 用户QQ (次数){Fore.RESET} 进行点赞")
+
+    def llm(self, argv=""):
+        if argv == "":
+            self.printf(f"请使用 {Fore.CYAN}llm 文本内容{Fore.RESET} 调用首个配置的大语言模型生成文本(如果可以)")
+        elif "llm_chat" in self.robot.func:
+            try:
+                llm_chat = self.robot.func["llm_chat"]
+                self.printf("LLM: ", end="", console=False)
+                for chunk in llm_chat(argv, stream=True):
+                    self.printf(chunk, end="", console=False, flush=True)
+                self.printf("", flush=True)
+            except Exception as e:
+                self.printf(f"LLM调用失败! {e}")
+        else:
+            self.printf("LLM模块未导入或未启用!")
 
     def msg(self, argv=""):
         if re.search(r"(\d+)\s+(.+)", argv):
@@ -1004,12 +1016,9 @@ class ExecuteCmd(object):
         :param end: 末尾字符
         :param console: 是否增加一行<console>
         """
-        self.robot.printf(
-            f"{Fore.CYAN}[CMD]{Fore.RESET} {msg}",
-            end=end,
-            console=console,
-            flush=flush,
-        )
+        if not flush:
+            msg = f"{Fore.CYAN}[CMD]{Fore.RESET} {msg}"
+        self.robot.printf(msg=msg, end=end, console=console, flush=flush)
 
     def warnf(self, msg, end="\n", console=True):
         """
@@ -1018,9 +1027,7 @@ class ExecuteCmd(object):
         :param end: 末尾字符
         :param console: 是否增加一行<console>
         """
-        self.robot.warnf(
-            f"{Fore.YELLOW}[CMD]{Fore.RESET} {msg}", end=end, console=console
-        )
+        self.robot.warnf(f"{Fore.CYAN}[CMD]{Fore.RESET} {msg}", end=end, console=console)
 
     def errorf(self, msg, end="\n", console=True):
         """
@@ -1029,6 +1036,4 @@ class ExecuteCmd(object):
         :param end: 末尾字符
         :param console: 是否增加一行<console>
         """
-        self.robot.errorf(
-            f"{Fore.YELLOW}[CMD]{Fore.RESET} {msg}", end=end, console=console
-        )
+        self.robot.errorf(f"{Fore.CYAN}[CMD]{Fore.RED} {msg}", end=end, console=console)

@@ -7,14 +7,26 @@ import html
 import io
 import logging
 import re
+import threading
 import time
-from typing import Any, Dict, List, Tuple
+import traceback
+from typing import Any, Dict, List
 
 from colorama import Fore
-import threading
-import traceback
-import requests
 from PIL import Image
+import httpx
+
+from maim_message import (
+    BaseMessageInfo,
+    FormatInfo,
+    UserInfo,
+    GroupInfo,
+    MessageBase,
+    Seg,
+    Router,
+    RouteConfig,
+    TargetConfig,
+)
 
 from src.utils import (
     Module,
@@ -31,18 +43,6 @@ from src.utils import (
     set_group_whole_ban,
     status_ok,
     via,
-)
-
-from maim_message import (
-    BaseMessageInfo,
-    FormatInfo,
-    UserInfo,
-    GroupInfo,
-    MessageBase,
-    Seg,
-    Router,
-    RouteConfig,
-    TargetConfig,
 )
 
 class Maim(Module):
@@ -362,7 +362,7 @@ class Maim(Module):
                 case "image":
                     try:
                         url = data.get("url")
-                        image_base64 = self.get_image_base64(url)
+                        image_base64 = await self.get_image_base64(url)
                         sub_type = data.get("sub_type")
                         if sub_type == 0:
                             seg = Seg(type="image", data=image_base64)
@@ -457,13 +457,13 @@ class Maim(Module):
                         if process_count > 5:
                             seg_data = Seg(type="text", data="[图片]\n")
                         else:
-                            img_base64 = self.get_image_base64(image_url)
+                            img_base64 = await self.get_image_base64(image_url)
                             seg_data = Seg(type="image", data=f"{img_base64}\n")
                     else:
                         if process_count > 3:
                             seg_data = Seg(type="text", data="[表情包]\n")
                         else:
-                            img_base64 = self.get_image_base64(image_url)
+                            img_base64 = await self.get_image_base64(image_url)
                             seg_data = Seg(type="emoji", data=f"{img_base64}\n")
                     if layer > 0:
                         data_list = [Seg(type="text", data=("--" * layer) + user_nickname_str), seg_data]
@@ -540,15 +540,15 @@ class Maim(Module):
             raw_message=self.event.msg,
         )
 
-    def get_image_base64(self, url: str, timeout: str=3, max_retries: str=3) -> str:
+    async def get_image_base64(self, url: str, timeout: str=3, max_retries: str=3) -> str:
         """获取图片/表情包的Base64"""
         for attempt in range(max_retries):
             try:
-                response = requests.get(url, timeout=timeout)
+                response = await httpx.AsyncClient().get(url, timeout=timeout)
                 if response.status_code != 200:
-                    raise requests.HTTPError(response=response)
+                    raise httpx.HTTPError(response.text)
                 return base64.b64encode(response.content).decode("utf-8")
-            except requests.exceptions.Timeout:
+            except httpx.TimeoutException:
                 self.printf(f"请求图片超时重试 {attempt + 1}/{max_retries}")
                 if attempt + 1 == max_retries:
                     raise
@@ -582,7 +582,7 @@ class Maim(Module):
             output_buffer.seek(0)
             return base64.b64encode(output_buffer.read()).decode("utf-8")
         except Exception as e:
-            self.errorf(f"图片转换为GIF失败: {str(e)}")
+            self.errorf(f"图片转换为GIF失败: {e}")
             return image_base64
 
     @via(
