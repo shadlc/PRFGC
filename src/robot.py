@@ -5,6 +5,7 @@ import importlib
 import json
 import logging
 import os
+import random
 import re
 import time
 import threading
@@ -12,10 +13,12 @@ import traceback
 
 from collections import deque
 from colorama import Fore
+import httpx
 
+from src import api
 from src.config import Config
 from src.utils import (
-    Event, Module, handle_placeholder, import_json, msg_img2char, reply_event, scan_missing_modules, simplify_traceback, receive_msg, send_msg
+    Event, Module, handle_placeholder, import_json, msg_img2char, reply_event, scan_missing_modules, simplify_traceback, receive_msg, send_msg, status_ok
 )
 from src.command import ExecuteCmd
 
@@ -67,6 +70,33 @@ class Concerto:
  (__/(_)/ / <_(__</_/ (_<__(_)/___/_(_)<__ 
         """
         self.loop = asyncio.get_event_loop()
+        self.printf(
+            random.choice([Fore.RED,Fore.GREEN,Fore.YELLOW,Fore.BLUE,Fore.MAGENTA,Fore.CYAN,Fore.WHITE])
+            + self.start_info + Fore.RESET, flush=True)
+
+    def run(self) -> bool:
+        """尝试连接到API"""
+        self.printf(f"正在连接API[{Fore.GREEN}{self.config.api_base}{Fore.RESET}]...", end="", console=False)
+        connected = False
+        while not connected:
+            self.printf(".", end="", flush=True)
+            try:
+                result = api.get(self, "/get_version_info")
+                connected = status_ok(result)
+                app_name = result.get("data",{}).get("app_name")
+                app_version = result.get("data",{}).get("app_version")
+                self.printf(f"已连接至 {Fore.YELLOW}{app_name}v{app_version}{Fore.RESET}", flush=True)
+                self.api_name = f"{app_name}v{app_version}"
+                result = api.get(self, "/get_login_info")
+                self.self_name = result["data"]["nickname"]
+                self.self_id = str(result["data"]["user_id"])
+                self.at_info = "[CQ:at,qq=" + str(self.self_id) + "]"
+                self.printf(f"已接入账号: {Fore.MAGENTA}{self.self_name}({self.self_id}){Fore.RESET}")
+            except httpx.RequestError:
+                continue
+            time.sleep(1)
+        self.import_modules()
+        return connected
 
     def listening_console(self):
         """监听来自终端的输入并处理"""
@@ -290,6 +320,8 @@ class Concerto:
                     is_module = False
                     for _, obj in list(vars(module).items()):
                         if isinstance(obj, type) and hasattr(obj, "ID") and obj.ID and hasattr(obj, "NAME") and obj.NAME:
+                            if obj.ID in self.config.disabled:
+                                self.printf(f"文件[{item}]有效, 但已禁用, 取消加载模块[{obj.ID}]!")
                             is_module = True
                             self.module_enable(obj, item)
                             if hasattr(obj, "AUTO_INIT") and obj.AUTO_INIT:

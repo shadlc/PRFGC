@@ -32,6 +32,7 @@ class Config:
             "image_color": "disabled",
             "min_image_width": 10,
             "max_image_width": 100,
+            "disabled": [],
         }
         self.init_config()
         self.raw = self.read()
@@ -54,6 +55,7 @@ class Config:
         self.image_color = self.raw.get("image_color", self.default["image_color"])
         self.min_image_width = self.raw.get("min_image_width", self.default["min_image_width"])
         self.max_image_width = self.raw.get("max_image_width", self.default["max_image_width"])
+        self.disabled = self.raw.get("disabled", self.default["disabled"])
 
     def init_config(self):
         """初始化配置文件"""

@@ -2,20 +2,20 @@
 
 import asyncio
 import base64
-import json
 import re
 import threading
 import time
 import traceback
 
-from bilibili_api import Credential, NetworkException, search, sync, user
+from bilibili_api import Credential, NetworkException, search, user, sync
+from bilibili_api.exceptions.ResponseCodeException import ResponseCodeException
 try:
     from playwright.async_api import async_playwright
     HAS_PLAYWRIGHT = True
 except ImportError:
     HAS_PLAYWRIGHT = False
 
-from src.utils import MiniCron, Module, build_node, send_msg, via
+from src.utils import MiniCron, Module, build_node, send_forward_msg, send_msg, via
 
 class Bilibili(Module):
     """哔哩哔哩模块"""
@@ -42,8 +42,11 @@ class Bilibili(Module):
         "env": {
             "sessdata": "",
             "bili_jct": "",
-            "user_agent": "",
+            "buvid3": "",
+            "buvid4": "",
+            "dedeuserid": "",
             "ac_time_value": "",
+            "user_agent": "",
             "proxy": None,
             "cron": "0 8 * * *"
         }
@@ -56,6 +59,13 @@ class Bilibili(Module):
 
     def __init__(self, event, auth=0):
         super().__init__(event, auth)
+        self.type_msg = {
+            "DYNAMIC_TYPE_AV": "投稿了一条新视频",
+            "DYNAMIC_TYPE_FORWARD": "转发了一条动态",
+            "DYNAMIC_TYPE_DRAW": "发布了一条文字消息",
+            "DYNAMIC_TYPE_MUSIC": "新出了一首音乐专辑",
+            "DYNAMIC_TYPE_ARTICLE": "发表了一篇新的专栏",
+        }
         if self.ID in self.robot.persist_mods:
             return
         self.robot.persist_mods[self.ID] = self
@@ -69,6 +79,9 @@ class Bilibili(Module):
         self.credential = Credential(
             sessdata=self.config["env"]["sessdata"],
             bili_jct=self.config["env"]["bili_jct"],
+            buvid3=self.config["env"]["buvid3"],
+            buvid4=self.config["env"]["buvid4"],
+            dedeuserid=self.config["env"]["dedeuserid"],
             ac_time_value=self.config["env"]["ac_time_value"],
         )
         if self.ID in self.robot.persist_mods:
@@ -85,7 +98,7 @@ class Bilibili(Module):
         self.init_task()
         self.loop.run_forever()
 
-    def init_task(self, interval=60):
+    def init_task(self, interval=20):
         """初始化任务"""
         time.sleep(10)
         dynamic = len(self.get_uid_list("dynamic"))
@@ -107,7 +120,7 @@ class Bilibili(Module):
                     await cron.run()
                 except Exception:
                     self.warnf(f"粉丝数轮询异常!\n{traceback.format_exc()}")
-                await asyncio.sleep(10)
+                await asyncio.sleep(interval)
         asyncio.run_coroutine_threadsafe(fans_loop(), self.loop)
         async def live_loop():
             while True:
@@ -115,7 +128,7 @@ class Bilibili(Module):
                     await self.live_check()
                 except Exception:
                     self.warnf(f"直播轮询异常!\n{traceback.format_exc()}")
-                await asyncio.sleep(10)
+                await asyncio.sleep(interval)
         asyncio.run_coroutine_threadsafe(live_loop(), self.loop)
         async def credential_refresh():
             while True:
@@ -123,6 +136,9 @@ class Bilibili(Module):
                     await self.credential.refresh()
                     self.config["env"]["sessdata"] = self.credential.sessdata
                     self.config["env"]["bili_jct"] = self.credential.bili_jct
+                    self.config["env"]["buvid3"] = self.credential.buvid3
+                    self.config["env"]["buvid4"] = self.credential.buvid4
+                    self.config["env"]["dedeuserid"] = self.credential.dedeuserid
                     self.config["env"]["ac_time_value"] = self.credential.ac_time_value
                     self.robot.persist_mods[self.ID].config = self.config.copy()
                     self.save_config()
@@ -216,31 +232,42 @@ class Bilibili(Module):
             msg = "查无此人"
         self.reply(msg)
 
-    @via(lambda self: self.at_or_private() and self.au(3) and self.match(r"^(开启|关闭)?\s?(\S+)\s?动态(通知)?$"))
+    @via(lambda self: self.at_or_private() and self.au(3) and self.match(r"^(开启|关闭)?\s?(\S+?)\s?最?新?动态(通知)?$"))
     async def dynamic_control(self):
         """动态控制"""
-        flag, user_input, _ = self.match(r"^(开启|关闭)?\s?(\S+)\s?动态(通知)?$").groups()
+        flag, user_input, _ = self.match(r"^(开启|关闭)?\s?(\S+?)\s?最?新?动态(通知)?$").groups()
         info = await self.get_info(user_input)
         if info:
             uid, name = info[0], info[1]
             if not flag:
-                dynamic = await self.get_latest_dynamic(int(uid))
-                if dynamic:
-                    msg = f"{dynamic["author"]}的最新一条动态:"
-                    msg += f"\nhttps://t.bilibili.com/{dynamic["dynamic_id"]}\n"
+                dyn = await self.get_latest_dynamic(int(uid))
+                if dyn:
+                    d_type = dyn["dynamic_type"]
+                    url = f"https://t.bilibili.com/{dyn["dynamic_id"]}"
                     if not HAS_PLAYWRIGHT:
-                        msg += f"\n{dynamic["content"]}"
-                        for img in dynamic["imgs"]:
-                            msg += f"[CQ:image,file={img}]"
-                        if dynamic["origin"]:
-                            msg += "========================="
-                            msg += dynamic["origin"]["content"]
-                            for img in dynamic["origin"]["imgs"]:
-                                msg += f"[CQ:image,file={img}]"
-                    else:
-                        screenshot_base64 = await self.get_dynamic_screenshot(dynamic["dynamic_id"])
+                        screenshot_base64 = await self.get_dynamic_screenshot(dyn["dynamic_id"])
                         if screenshot_base64:
                             msg += f"\n[CQ:image,file=base64://{screenshot_base64}]"
+                            self.reply(msg)
+                            return
+                    title = f"[哔哩哔哩] {dyn["author"]}{self.type_msg.get(d_type, "发布了新动态")}"
+                    nodes = []
+                    nodes.append(build_node(url))
+                    msg = dyn["content"]
+                    for img in dyn["imgs"]:
+                        msg += f"[CQ:image,file={img}]"
+                    nodes.append(build_node(msg))
+                    if ori := dyn["origin"]:
+                        nodes.append(build_node("====================\n以下是转发的动态内容:"))
+                        url = f"https://t.bilibili.com/{ori["dynamic_id"]}"
+                        nodes.append(build_node(url))
+                        msg = f"{ori["author"]}:\n"
+                        msg += ori["content"]
+                        for img in ori["imgs"]:
+                            msg += f"[CQ:image,file={img}]"
+                        nodes.append(build_node(msg))
+                    self.reply_forward(nodes, title)
+                    return
                 else:
                     msg = f"{name}没有发过任何动态..."
             elif uid in self.config[self.owner_id]["sub"]:
@@ -458,7 +485,7 @@ class Bilibili(Module):
                             clip["height"] = bar_bound["y"] - clip["y"]
                     screenshot = await page.screenshot(clip=clip, full_page=True)
                     return base64.b64encode(screenshot).decode("utf-8")
-        except Exception as e:
+        except Exception:
             self.errorf(f"截取动态【{url}】时发生错误：{traceback.format_exc()}")
         finally:
             await context.close()
@@ -485,33 +512,38 @@ class Bilibili(Module):
                 await asyncio.sleep(1)
                 continue
             self.printf(f"{name}({uid})发布了新动态{len(dynamics)}条")
-            type_msg = {
-                1: "转发了一条动态",
-                2: "发布了新动态",
-                8: "投稿了新视频",
-            }
             notice_list = self.get_notice_list("dynamic", uid)
             for owner_id in notice_list:
                 for item in dynamics:
                     self.dynamics[uid].append(item)
-                    dynamic = self.parse_dynamic(item)
-                    msg = f"{dynamic["author"]}{type_msg.get(dynamic["dynamic_type"], "发布了新动态")}"
-                    msg += f"\nhttps://t.bilibili.com/{dynamic["dynamic_id"]}\n"
+                    dyn = self.parse_dynamic(item)
+                    d_type = dyn["dynamic_type"]
+                    url = f"https://t.bilibili.com/{dyn["dynamic_id"]}"
                     if not HAS_PLAYWRIGHT:
-                        msg += f"\n{dynamic["content"]}"
-                        for img in dynamic["imgs"]:
-                            msg += f"[CQ:image,file={img}]"
-                        if dynamic["origin"]:
-                            msg += "========================="
-                            msg += dynamic["origin"]["content"]
-                            for img in dynamic["origin"]["imgs"]:
-                                msg += f"[CQ:image,file={img}]"
-                    else:
-                        screenshot_base64 = await self.get_dynamic_screenshot(dynamic["dynamic_id"])
+                        screenshot_base64 = await self.get_dynamic_screenshot(dyn["dynamic_id"])
                         if screenshot_base64:
                             msg += f"\n[CQ:image,file=base64://{screenshot_base64}]"
-                self.reply_back(owner_id, msg)
-                await asyncio.sleep(3)
+                            self.reply_back(owner_id, msg)
+                            await asyncio.sleep(1)
+                            continue
+                    title = f"[哔哩哔哩] {dyn["author"]}{self.type_msg.get(d_type, "发布了新动态")}"
+                    nodes = []
+                    nodes.append(build_node(url))
+                    msg = dyn["content"]
+                    for img in dyn["imgs"]:
+                        msg += f"[CQ:image,file={img}]"
+                    nodes.append(build_node(msg))
+                    if ori := dyn["origin"]:
+                        nodes.append(build_node("====================\n以下是转发的动态内容:"))
+                        url = f"https://t.bilibili.com/{ori["dynamic_id"]}"
+                        nodes.append(build_node(url))
+                        msg = f"{ori["author"]}:\n"
+                        msg += ori["content"]
+                        for img in ori["imgs"]:
+                            msg += f"[CQ:image,file={img}]"
+                        nodes.append(build_node(msg))
+                    self.reply_forward_back(owner_id, nodes, title)
+                    await asyncio.sleep(1)
             await asyncio.sleep(interval)
 
     async def live_check(self, interval=10):
@@ -533,7 +565,7 @@ class Bilibili(Module):
                 continue
             self.live_status[uid] = status
             if not status:
-                return
+                continue
             notice_list = self.get_notice_list("live", uid)
             for owner_id in notice_list:
                 uname = self.get_local_name(uid)
@@ -552,7 +584,7 @@ class Bilibili(Module):
         if len(uid_list) == 0:
             return
         for uid in uid_list:
-            info =  await self.get_user_simple_info(uid)
+            info = await self.get_user_simple_info(uid)
             if info:
                 uid, name, fans, avatar = info
                 past_fans = int(self.get_follow_list_info(uid, "fans"))
@@ -633,18 +665,24 @@ class Bilibili(Module):
         self.robot.persist_mods[self.ID].config = self.config.copy()
         self.save_config()
 
-    async def get_user_dynamics(self, uid: str) -> list:
+    async def get_user_dynamics(self, uid: str, need_top=False) -> list:
         """刷新动态"""
         name = self.get_local_name(uid)
         try:
             u = user.User(int(uid), self.credential)
-            dynamic_list = await u.get_dynamics()
-            dynamics = dynamic_list.get("cards") or []
+            dynamic_list = await u.get_dynamics_new()
+            dynamics = dynamic_list.get("items") or []
+            if len(dynamics) and not need_top:
+                text = dynamics[0].get("modules", {}).get("module_tag", {}).get("text", "")
+                if text == "置顶":
+                    dynamics = dynamics[1:]
             return dynamics
         except NetworkException as e:
-            self.warnf(f"获取{name}({uid})的动态异常 {e.status}")
+            self.warnf(f"获取{name}({uid})的动态网络异常 {e.status}")
         except asyncio.TimeoutError:
             self.warnf(f"获取{name}({uid})的动态超时")
+        except ResponseCodeException as e:
+            self.warnf(f"获取{name}({uid})的动态返回码异常 {e.code} {e.msg}")
         except Exception:
             self.warnf(f"用户{name}({uid})的动态获取失败: {traceback.format_exc()}")
         return []
@@ -656,13 +694,13 @@ class Bilibili(Module):
         if not dynamics:
             return result
         for i, dynamic in enumerate(dynamics):
-            dynamic_id = dynamic["desc"]["dynamic_id"]
-            if dynamic_id in [d["desc"]["dynamic_id"] for d in self.dynamics.get(uid, {})]:
+            dynamic_id = dynamic["id_str"]
+            if dynamic_id in [d["id_str"] for d in self.dynamics.get(uid, {})]:
                 continue
             if len(self.dynamics.get(uid, {})) == 0:
                 self.dynamics[uid].insert(i, dynamic)
                 result.append(dynamic)
-            elif int(dynamic_id) > int(self.dynamics[uid][-1]["desc"]["dynamic_id"]):
+            elif int(dynamic_id) > int(self.dynamics[uid][-1]["id_str"]):
                 self.dynamics[uid].insert(i, dynamic)
                 result.append(dynamic)
         return result
@@ -684,9 +722,11 @@ class Bilibili(Module):
                 return live_info.get("live_room")
             return None
         except NetworkException as e:
-            self.warnf(f"获取{name}({uid})的动态异常 {e.status}")
+            self.warnf(f"获取{name}({uid})的直播状态网络异常 {e.status}")
         except asyncio.TimeoutError:
             self.warnf(f"获取{name}({uid})直播状态超时")
+        except ResponseCodeException as e:
+            self.warnf(f"获取{name}({uid})的直播状态返回码异常 {e.code} {e.msg}")
         except Exception:
             self.warnf(f"获取{name}({uid})的直播状态失败: {traceback.format_exc()}")
 
@@ -703,9 +743,11 @@ class Bilibili(Module):
                 avatar = user_info["face"]
                 return [uid, name, fans, avatar]
         except NetworkException as e:
-            self.warnf(f"获取{name}({uid})的动态异常 {e.status}")
+            self.warnf(f"获取{name}({uid})的用户信息网络异常 {e.status}")
         except asyncio.TimeoutError:
             self.warnf(f"获取{name}({uid})的用户信息超时")
+        except ResponseCodeException as e:
+            self.warnf(f"获取{name}({uid})的用户信息返回码异常 {e.code} {e.msg}")
         except Exception:
             self.warnf(f"查询{name}({uid})的用户信息请求失败: {traceback.format_exc()}")
         return None
@@ -826,44 +868,54 @@ class Bilibili(Module):
         result += f"\n粉丝数通知：{fans}"
         return result
 
-    def parse_dynamic(self, dynamic: dict) -> dict:
+    def parse_dynamic(self, data: dict) -> dict:
         """将动态解析为可读数据"""
-        dynamic_id = dynamic["desc"]["dynamic_id"]
-        dynamic_type = dynamic["desc"]["type"]
+        dynamic_id = data["id_str"]
+        dynamic_type = data["type"]
         author = ""
-        text = ""
+        content = ""
         imgs = []
         origin = None
-        if uname := dynamic.get("card", {}).get("user", {}).get("uname", ""):
-            author = uname
-        if name := dynamic.get("card", {}).get("user", {}).get("name", ""):
+        module_author = data.get("modules", {}).get("module_author", {})
+        module_dynamic = data.get("modules", {}).get("module_dynamic", {})
+        if name := module_author.get("name", ""):
             author = name
-        if content := dynamic.get("card", {}).get("item", {}).get("content", ""):
-            text = content
-            if origin_raw := dynamic.get("card", {}).get("item", {}).get("origin"):
-                origin_json = json.loads(origin_raw)
-                origin_content = origin_json.get("item", {}).get("description", {})
-                origin_pictures = origin_json.get("item", {}).get("pictures")
-                origin_imgs = [i.get("img_src") for i in origin_pictures if i.get("img_src")]
-                origin = {"content": origin_content, "imgs": origin_imgs}
-        elif description := dynamic.get("card", {}).get("item", {}).get("description", ""):
-            text = description
-        elif title := dynamic.get("card", {}).get("title", ""):
-            usr_action_txt = dynamic.get("display", {}).get("usr_action_txt", "")
-            text = f"{usr_action_txt} {title}"
-        if pic := dynamic.get("card", {}).get("pic"):
-            imgs.append(pic)
-        if first_frame := dynamic.get("card", {}).get("first_frame"):
-            imgs.append(first_frame)
-        if first_frame := dynamic.get("card", {}).get("first_frame"):
-            imgs.append(first_frame)
-        if pictures := dynamic.get("card", {}).get("item", {}).get("pictures"):
-            imgs += [i.get("img_src") for i in pictures if i.get("img_src")]
+        if "DYNAMIC_TYPE_FORWARD" == dynamic_type:
+            content = module_dynamic.get("desc", {}).get("text", "")
+            origin = self.parse_dynamic(data.get("orig", {}))
+        elif "DYNAMIC_TYPE_AV" == dynamic_type:
+            archive = module_dynamic.get("desc", {}).get("archive", {})
+            content = archive.get("title", "")
+            content += "\n"
+            content += archive.get("desc", "")
+            if cover := archive.get("cover"):
+                imgs.append(cover)
+        elif "DYNAMIC_TYPE_DRAW" == dynamic_type:
+            opus = module_dynamic.get("major", {}).get("opus", {})
+            content = opus.get("summary", {}).get("text", "")
+            if pics := opus.get("pics"):
+                for pic in pics:
+                    imgs.append(pic.get("url"))
+        elif "DYNAMIC_TYPE_ARTICLE" == dynamic_type:
+            opus = module_dynamic.get("major", {}).get("opus", {})
+            content = opus.get("title", "")
+            content += "\n"
+            content = opus.get("summary", {}).get("text", "")
+            if pics := opus.get("pics"):
+                for pic in pics:
+                    imgs.append(pic.get("url"))
+        elif "DYNAMIC_TYPE_MUSIC" == dynamic_type:
+            music = module_dynamic.get("major", {}).get("music", {})
+            content = module_dynamic.get("desc", {}).get("text", {})
+            content += "\n"
+            content = music.get("title", "")
+            if cover := music.get("cover"):
+                imgs.append(cover)
         return {
             "dynamic_id": dynamic_id,
             "dynamic_type": dynamic_type,
             "author": author,
-            "content": text,
+            "content": content,
             "imgs": imgs,
             "origin": origin,
         }
@@ -876,3 +928,12 @@ class Bilibili(Module):
         else:
             user_id = int(owner_id[1:])
             return send_msg(self.robot, "private", user_id, msg)
+
+    def reply_forward_back(self, owner_id: str, nodes: list, source=None, hidden=True) -> dict:
+        """回复消息"""
+        if owner_id.startswith("g"):
+            group_id = int(owner_id[1:])
+            return send_forward_msg(self.robot, nodes, group_id=group_id, source=source, hidden=hidden)
+        else:
+            user_id = int(owner_id[1:])
+            return send_forward_msg(self.robot, nodes, user_id=user_id, source=source, hidden=hidden)

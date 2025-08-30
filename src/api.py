@@ -11,13 +11,6 @@ import httpx
 if TYPE_CHECKING:
     from robot import Concerto
 
-def status_ok(response):
-    """判断是否返回成功"""
-    if response.get("status") == "ok":
-        return True
-    else:
-        return False
-
 def get(robot: "Concerto", url):
     """GET请求"""
     try:
@@ -53,27 +46,6 @@ def post(robot: "Concerto", url, data):
     except httpx.InvalidURL:
         robot.errorf("无效的请求地址！")
         return {}
-
-def connect_api(robot: "Concerto") -> bool:
-    """尝试连接到API"""
-    connected = False
-    while not connected:
-        robot.printf(".", end="", flush=True)
-        try:
-            result = get(robot, "/get_version_info")
-            connected = status_ok(result)
-            app_name = result.get("data",{}).get("app_name")
-            app_version = result.get("data",{}).get("app_version")
-            robot.printf(f"已连接至 {Fore.YELLOW}{app_name}v{app_version}{Fore.RESET}", flush=True)
-            robot.api_name = f"{app_name}v{app_version}"
-            result = get(robot, "/get_login_info")
-            robot.self_name = result["data"]["nickname"]
-            robot.self_id = str(result["data"]["user_id"])
-            robot.at_info = "[CQ:at,qq=" + str(robot.self_id) + "]"
-        except httpx.RequestError:
-            continue
-        time.sleep(1)
-    return connected
 
 def send_msg(robot: "Concerto", resp: dict):
     msg_type = resp.get("msg_type")  # 回复类型（群聊/私聊）
@@ -191,7 +163,7 @@ def set_model_show(robot: "Concerto", resp: dict):
 
 def get_version_info(robot: "Concerto"):
     result = get(robot, "/get_version_info")
-    if status_ok(result):
+    if result.get("status") == "ok":
         return {
             "app_name": result["data"]["app_name"],
             "app_version": result["data"]["app_version"],

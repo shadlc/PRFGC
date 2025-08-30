@@ -1,5 +1,6 @@
 """机器人基础通知处理模块"""
 
+from collections import deque
 import random
 import time
 
@@ -109,7 +110,9 @@ class Notice(Module):
                 if self.event.msg_id == message.get("message_id"):
                     if not self.robot.data.get("latest_recall"):
                         self.robot.data["latest_recall"] = {}
-                    self.robot.data["latest_recall"][self.owner_id] = message
+                    if not self.robot.data.get("latest_recall", {}).get(self.owner_id):
+                        self.robot.data["latest_recall"][self.owner_id] = deque(maxlen=10)
+                    self.robot.data["latest_recall"][self.owner_id].append(message)
 
     @via(lambda self: self.event.notice_type == "group_upload")
     def group_upload(self):

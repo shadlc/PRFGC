@@ -222,16 +222,19 @@ class Chat(Module):
             msg = "生成转发消息错误~"
             self.reply(msg)
 
-    @via(lambda self: self.at_or_private() and self.au(2) and self.match(r"^(刚刚|刚才|先前)?(说|撤回)了?(什么|啥)$"))
+    @via(lambda self: self.at_or_private() and self.au(2) and self.match(r"^(刚刚|刚才|先前)?\S*(说|撤回)了?(什么|啥)$"))
     def what_recall(self):
         """撤回了什么"""
         if self.au(2, 2):
             pass
-        elif message := self.robot.data.get("latest_recall",{}).get(self.owner_id):
-            user_name = message.get("sender",{}).get("nickname","")
-            content = message.get("raw_message","")
-            msg = f"刚刚{user_name}撤回了一条消息:\n\n{content}"
-            self.reply(msg)
+        elif messages := self.robot.data.get("latest_recall",{}).get(self.owner_id):
+            nodes = []
+            for msg in messages:
+                user_id = msg.get("user_id")
+                user_name = msg.get("sender",{}).get("nickname","")
+                content = msg.get("raw_message","")
+                nodes.append(build_node(user_id=user_id, user_name=user_name, content=content))
+            self.reply_forward(nodes, "历史撤回消息列表", hidden=False)
         else:
             self.reply("什么也没有哦~")
 
