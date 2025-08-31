@@ -14,7 +14,6 @@ from typing import Any, Dict, List
 
 from colorama import Fore
 from PIL import Image
-import httpx
 
 from maim_message import (
     BaseMessageInfo,
@@ -33,6 +32,8 @@ from src.utils import (
     apply_formatter,
     del_msg,
     get_forward_msg,
+    async_get_image_base64,
+    get_image_format,
     get_msg,
     group_member_info,
     poke,
@@ -92,6 +93,7 @@ class Maim(Module):
             maim: Maim = self.robot.persist_mods[self.ID]
             self.router = maim.router
             self.loop = maim.loop
+            self.error_times = 0
         return self.config["url"]
 
     def router_run(self, router=None):
@@ -260,7 +262,7 @@ class Maim(Module):
                 new_payload = build_payload(payload, f"[CQ:image,file=base64://{image},subtype=0]", False)
             elif seg.type == "emoji":
                 emoji = seg.data
-                image_format = self.get_image_format(emoji)
+                image_format = get_image_format(emoji)
                 if image_format != "gif":
                     emoji = self.convert_image_to_gif(emoji)
                 new_payload = build_payload(payload, f"[CQ:image,file=base64://{emoji},subtype=1,summary=&#91;动画表情&#93;]", False)
@@ -362,7 +364,7 @@ class Maim(Module):
                 case "image":
                     try:
                         url = data.get("url")
-                        image_base64 = await self.get_image_base64(url)
+                        image_base64 = await async_get_image_base64(self.robot, url)
                         sub_type = data.get("sub_type")
                         if sub_type == 0:
                             seg = Seg(type="image", data=image_base64)
@@ -457,13 +459,13 @@ class Maim(Module):
                         if process_count > 5:
                             seg_data = Seg(type="text", data="[图片]\n")
                         else:
-                            img_base64 = await self.get_image_base64(image_url)
+                            img_base64 = await async_get_image_base64(self.robot, image_url)
                             seg_data = Seg(type="image", data=f"{img_base64}\n")
                     else:
                         if process_count > 3:
                             seg_data = Seg(type="text", data="[表情包]\n")
                         else:
-                            img_base64 = await self.get_image_base64(image_url)
+                            img_base64 = await async_get_image_base64(self.robot, image_url)
                             seg_data = Seg(type="emoji", data=f"{img_base64}\n")
                     if layer > 0:
                         data_list = [Seg(type="text", data=("--" * layer) + user_nickname_str), seg_data]
@@ -493,6 +495,7 @@ class Maim(Module):
             return send_status
         except Exception:
             self.errorf(f"请检查与MaiMBot之间的连接, 发送消息失败: {traceback.format_exc()}")
+            self.error_times += 1
 
     async def construct_message(self) -> MessageBase:
         """根据平台事件构造标准 MessageBase"""
@@ -540,30 +543,6 @@ class Maim(Module):
             raw_message=self.event.msg,
         )
 
-    async def get_image_base64(self, url: str, timeout: str=3, max_retries: str=3) -> str:
-        """获取图片/表情包的Base64"""
-        for attempt in range(max_retries):
-            try:
-                response = await httpx.AsyncClient().get(url, timeout=timeout)
-                if response.status_code != 200:
-                    raise httpx.HTTPError(response.text)
-                return base64.b64encode(response.content).decode("utf-8")
-            except httpx.TimeoutException:
-                self.printf(f"请求图片超时重试 {attempt + 1}/{max_retries}")
-                if attempt + 1 == max_retries:
-                    raise
-
-    def get_image_format(self, data: str) -> str:
-        """
-        从Base64编码的数据中确定图片的格式
-        Parameters:
-            raw_data: str: Base64编码的图片数据
-        Returns:
-            format: str: 图片的格式（例如 'jpeg', 'png', 'gif'）
-        """
-        image_bytes = base64.b64decode(data)
-        return Image.open(io.BytesIO(image_bytes)).format.lower()
-
     def convert_image_to_gif(self, image_base64: str) -> str:
         """
         将Base64编码的图片转换为GIF格式
@@ -610,6 +589,11 @@ class Maim(Module):
     def send_maimbot(self):
         """发送至麦麦"""
         async def send_msg_task():
+            if self.error_times > 3:
+                self.warnf("检测到连接异常次数大于三次，自动重启路由")
+                await self.router.stop()
+                await self.router.run()
+                self.robot.persist_mods[self.ID].error_times = 0
             msg = await self.construct_message()
             await self.send_to_maim(msg)
         self.loop.call_soon_threadsafe(

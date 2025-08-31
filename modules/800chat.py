@@ -225,16 +225,14 @@ class Chat(Module):
     @via(lambda self: self.at_or_private() and self.au(2) and self.match(r"^(刚刚|刚才|先前)?\S*(说|撤回)了?(什么|啥)$"))
     def what_recall(self):
         """撤回了什么"""
-        if self.au(2, 2):
-            pass
-        elif messages := self.robot.data.get("latest_recall",{}).get(self.owner_id):
+        if messages := self.robot.data.get("latest_recall",{}).get(self.owner_id):
             nodes = []
             for msg in messages:
                 user_id = msg.get("user_id")
-                user_name = msg.get("sender",{}).get("nickname","")
+                nickname = msg.get("sender",{}).get("nickname","")
                 content = msg.get("raw_message","")
-                nodes.append(build_node(user_id=user_id, user_name=user_name, content=content))
-            self.reply_forward(nodes, "历史撤回消息列表", hidden=False)
+                nodes.append(build_node(content, user_id=user_id, nickname=nickname))
+            self.reply_forward(nodes, "撤回消息列表", hidden=False)
         else:
             self.reply("什么也没有哦~")
 
@@ -243,8 +241,9 @@ class Chat(Module):
         """获取表情链接"""
         msg_id = self.match(r"^\s*\[CQ:reply,id=([^\]]+?)\]\s*$").groups()[0]
         reply_msg = get_msg(self.robot, msg_id)
-        if status_ok(reply_msg) and re.match(r"^\s*\[CQ:image,([^\]]+?)\]\s*$", reply_msg["data"]["message"]):
-            file, url = re.match(r"^\s*\[CQ:image,.*file=([^,\]]+?),.*url=([^,\]]+?),.*\]\s*$", reply_msg["data"]["message"]).groups()
+        msg = reply_msg["data"]["message"]
+        if status_ok(reply_msg) and re.match(r"^\s*\[CQ:image,([^\]]+?)\]\s*$", msg):
+            _, url = re.match(r"^\s*\[CQ:image,.*file=([^,\]]+?),.*url=([^,\]]+?),.*\]\s*$", msg).groups()
             msg = f"{url}"
             self.reply(msg)
             self.success = True

@@ -18,7 +18,7 @@ import httpx
 from src import api
 from src.config import Config
 from src.utils import (
-    Event, Module, handle_placeholder, import_json, msg_img2char, reply_event, scan_missing_modules, simplify_traceback, receive_msg, send_msg, status_ok
+    Event, Module, format_to_log, handle_placeholder, import_json, msg_img2char, reply_event, scan_missing_modules, simplify_traceback, receive_msg, send_msg, status_ok
 )
 from src.command import ExecuteCmd
 
@@ -69,7 +69,6 @@ class Concerto:
   /   __ ____  _. _  __  /  __ /--<  __ /  
  (__/(_)/ / <_(__</_/ (_<__(_)/___/_(_)<__ 
         """
-        self.loop = asyncio.get_event_loop()
         self.printf(
             random.choice([Fore.RED,Fore.GREEN,Fore.YELLOW,Fore.BLUE,Fore.MAGENTA,Fore.CYAN,Fore.WHITE])
             + self.start_info + Fore.RESET, flush=True)
@@ -210,14 +209,17 @@ class Concerto:
                         if mod(event, auth).success:
                             break
         except Exception:
-            if event.group_id != "" and event.group_id not in self.config.rev_group:
-                return
             if not self.config.is_error_reply:
                 return
-            if len(self.config.admin_list):
-                send_msg(self, "private", self.config.admin_list[0], f"%FATAL_ERROR%\n{simplify_traceback(traceback.format_exc())}")
-            else:
+            if event.group_id == "":
                 reply_event(self, event, f"%FATAL_ERROR%\n{simplify_traceback(traceback.format_exc())}")
+            else:
+                if len(self.config.admin_list):
+                    send_msg(self, "private", self.config.admin_list[0], f"%FATAL_ERROR%\n{simplify_traceback(traceback.format_exc())}")
+                elif event.group_id not in self.config.rev_group:
+                    return
+                else:
+                    reply_event(self, event, f"%FATAL_ERROR%\n{simplify_traceback(traceback.format_exc())}")
 
     def message(self, event: Event, auth=3):
         """处理消息事件
@@ -312,21 +314,24 @@ class Concerto:
                     module_name = os.path.splitext(item)[0]
                     missing = scan_missing_modules(item_path)
                     if missing:
-                        self.errorf(f"文件[{item}]缺失模块: {" ".join(missing)}, 加载失败!")
+                        self.errorf(f"文件({item})缺失模块: {" ".join(missing)}, 加载失败!")
                         continue
                     spec = importlib.util.spec_from_file_location(module_name, item_path)
                     module = importlib.util.module_from_spec(spec)
                     spec.loader.exec_module(module)
                     is_module = False
+                    disabled = False
                     for _, obj in list(vars(module).items()):
                         if isinstance(obj, type) and hasattr(obj, "ID") and obj.ID and hasattr(obj, "NAME") and obj.NAME:
                             if obj.ID in self.config.disabled:
-                                self.printf(f"文件[{item}]有效, 但已禁用, 取消加载模块[{obj.ID}]!")
+                                self.printf(f"[{obj.ID}] 文件({item})有效, 但已禁用, 取消加载模块!")
+                                disabled = True
+                                continue
                             is_module = True
                             self.module_enable(obj, item)
                             if hasattr(obj, "AUTO_INIT") and obj.AUTO_INIT:
                                 obj(Event(self))
-                    if not is_module:
+                    if not is_module and not disabled:
                         self.warnf(f"文件[{item}]内没有有效的模块, 已取消加载!")
         import_classes("modules")
 
@@ -343,15 +348,6 @@ class Concerto:
         else:
             self.modules[module.ID] = module
             self.printf(f"{Fore.CYAN}[{module.ID}] {Fore.RESET}{module.NAME}({module_file})已接入！")
-    
-    def format_to_log(self, text: str) -> str:
-        """
-        格式化为日志友好型文本
-        :param text: 输入文本
-        """
-        text = re.sub(r"\x1B\[[0-?]*[ -/]*[@-~]", "", text)
-        text = re.sub(r"(\s?█+\s*)+", "[图片]", text)
-        return text.strip()
 
     def printf(self, msg, end="\n", console=True, flush=False):
         """
@@ -370,7 +366,7 @@ class Concerto:
             print(f"{prefix}{msg}", end=end, flush=flush)
         if console and not flush:
             print(f"\r{Fore.GREEN}<console> {Fore.RESET}", end="")
-        logger.info("%s", self.format_to_log(f"{prefix}{msg}"))
+        logger.info("%s", format_to_log(f"{prefix}{msg}"))
 
     def warnf(self, msg, end="\n", console=True):
         """
@@ -384,7 +380,7 @@ class Concerto:
         prefix = f"\r[{time.strftime("%H:%M:%S", time.localtime())} WARN] "
         msg = f"{Fore.YELLOW}{prefix}{msg}{Fore.RESET}"
         print(msg, end=end)
-        logger.info("%s", self.format_to_log(msg))
+        logger.info("%s", format_to_log(msg))
         if console:
             print(f"\r{Fore.GREEN}<console> {Fore.RESET}", end="")
 
@@ -399,6 +395,6 @@ class Concerto:
         prefix = f"\r[{time.strftime("%H:%M:%S", time.localtime())} ERROR] "
         msg = f"{Fore.RED}{prefix}{msg}{Fore.RESET}"
         print(msg, end=end)
-        logger.info("%s", self.format_to_log(msg))
+        logger.info("%s", format_to_log(msg))
         if console:
             print(f"\r{Fore.GREEN}<console> {Fore.RESET}", end="")

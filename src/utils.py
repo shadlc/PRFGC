@@ -2,6 +2,7 @@
 
 import ast
 import asyncio
+import base64
 from datetime import datetime, timedelta
 import importlib
 import inspect
@@ -168,12 +169,20 @@ def apply_formatter(logger: logging.Logger, mid: str):
         logger.handlers[0].setFormatter(formatter)
     return logger
 
-def calc_size(byte: int):
-    """
-    格式化文件大小
-    :param byte: 字节数
-    :return: 格式化文件大小
-    """
+def calc_time(sec: int) -> str:
+    """格式化时间"""
+    units = [("天", 86400), ("小时", 3600), ("分钟", 60), ("秒", 1)]
+    parts = []
+    for name, div in units:
+        if sec >= div:
+            parts.append(f"{int(sec//div)}{name}")
+            sec %= div
+    return "".join(parts) or "0秒"
+
+def calc_size(byte: int) -> str:
+    """格式化文件大小"""
+    if byte == 0:
+        return "0 Bytes"
     symbols = ("KB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB")
     prefix = dict()
     for a, s in enumerate(symbols):
@@ -183,6 +192,15 @@ def calc_size(byte: int):
             value = float(byte) / prefix[s]
             return "%.2f%s" % (value, s)
     return ".%sB" % byte
+
+def format_to_log(text: str) -> str:
+    """
+    格式化为日志友好型文本
+    :param text: 输入文本
+    """
+    text = re.sub(r"\x1B\[[0-?]*[ -/]*[@-~]", "", text)
+    text = re.sub(r"(\s?█+\s*)+", "[图片]", text)
+    return text.strip()
 
 def char_colorama(char: str, rgb: list):
     """
@@ -293,6 +311,45 @@ def msg_img2char(config: Config, msg: str):
                 traceback.print_exc()
             return msg
     return msg
+
+async def async_get_image_base64(robot : "Concerto", url: str, timeout: str=3, max_retries: str=3) -> str:
+    """获取图片的Base64"""
+    for attempt in range(max_retries):
+        try:
+            response = await httpx.AsyncClient().get(url, timeout=timeout)
+            if response.status_code != 200:
+                raise httpx.HTTPError(response.text)
+            return base64.b64encode(response.content).decode("utf-8")
+        except httpx.TimeoutException:
+            robot.printf(f"请求图片超时重试 {attempt + 1}/{max_retries}")
+            if attempt + 1 == max_retries:
+                raise
+
+def get_image_base64(robot : "Concerto", url: str, timeout: str=3, max_retries: str=3) -> str:
+    """获取图片的Base64"""
+    if not url:
+        return ""
+    for attempt in range(max_retries):
+        try:
+            response = httpx.Client().get(url, timeout=timeout)
+            if response.status_code != 200:
+                raise httpx.HTTPError(response.text)
+            return base64.b64encode(response.content).decode("utf-8")
+        except httpx.TimeoutException:
+            robot.printf(f"请求图片超时重试 {attempt + 1}/{max_retries}")
+            if attempt + 1 == max_retries:
+                raise
+
+def get_image_format(data: str) -> str:
+    """
+    从Base64编码的数据中确定图片的格式
+    Parameters:
+        raw_data: str: Base64编码的图片数据
+    Returns:
+        format: str: 图片的格式（例如 "jpeg", "png", "gif"）
+    """
+    image_bytes = base64.b64decode(data)
+    return Image.open(io.BytesIO(image_bytes)).format.lower()
 
 def status_ok(response: dict):
     """
@@ -850,21 +907,23 @@ def scan_missing_modules(file_path: str):
 def via(condition, success=True):
     """模块方法装饰器"""
     def decorator(func):
-        async def wrapper(self: "Module", *args, **kwargs):
+        def wrapper(self: "Module", *args, **kwargs):
             if condition(self):
                 if self.robot.config.is_debug:
                     self.printf(f"执行{Fore.YELLOW}[{func.__name__}]{Fore.RESET}方法")
                 try:
                     self.success = success
                     if inspect.iscoroutinefunction(func):
-                        return await func(self, *args, **kwargs)
+                        loop = asyncio.new_event_loop()
+                        asyncio.set_event_loop(loop)
+                        return loop.run_until_complete(func(self, *args, **kwargs))
                     else:
                         return func(self, *args, **kwargs)
-                except Exception:
+                except Exception as e:
                     self.errorf(f"{Fore.RED}执行{Fore.YELLOW}[{self.ID}.{func.__name__}]{Fore.RED}方法发生错误！")
                     self.errorf(Fore.RED + traceback.format_exc())
                     self.success = False
-                    raise
+                    raise e
             # else:
             #     self.robot.printf(f"未满足[{self.ID}.{func.__name__}]的条件")
         wrapper._method = True # pylint: disable=protected-access
@@ -1016,18 +1075,20 @@ class Module:
         self.init_config()
         if not self.premise():
             return
-        asyncio.run_coroutine_threadsafe(self.activate(), self.robot.loop)
+        self.activate()
 
     def premise(self):
         """前置条件"""
         return True
 
-    async def activate(self):
+    def activate(self):
         """执行类方法"""
         for attr_name in dir(self):
+            if self.success:
+                return
             func = getattr(self, attr_name)
-            if not self.success and callable(func) and getattr(func, "_method", False):
-                await func()
+            if callable(func) and getattr(func, "_method", False):
+                func()
 
     def au(self, max_level=3, min_level=0):
         """检查权限等级"""
