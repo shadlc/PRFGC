@@ -82,6 +82,7 @@ class Maim(Module):
         logger.setLevel(logging.INFO)
         apply_formatter(logger, self.ID)
         self.loop = asyncio.get_event_loop()
+        self.error_times = 0
         target_config = TargetConfig(url=self.config["url"], token=None)
         route_config = RouteConfig({self.config["platform"]: target_config})
         self.router = Router(route_config)
@@ -93,7 +94,7 @@ class Maim(Module):
             maim: Maim = self.robot.persist_mods[self.ID]
             self.router = maim.router
             self.loop = maim.loop
-            self.error_times = 0
+            self.error_times = maim.error_times
         return self.config["url"]
 
     def router_run(self, router=None):

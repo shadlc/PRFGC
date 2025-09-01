@@ -9,7 +9,7 @@ import time
 import urllib
 from yt_dlp import YoutubeDL, DownloadError
 
-from src.utils import Module, build_node, calc_size, calc_time, format_to_log, get_image_base64, get_msg, status_ok, via
+from src.utils import Module, build_node, calc_size, calc_time, format_to_log, get_forward_msg, get_image_base64, get_msg, status_ok, via
 
 class Ytdlp(Module):
     """视频下载模块"""
@@ -66,7 +66,15 @@ class Ytdlp(Module):
                 return
             if re.search("下载视频", msg) or re.search("下载视频", self.event.msg):
                 return
-            url_match = re.search(self.video_pattern, msg)
+            if re.search(self.video_pattern, msg):
+                url_match = re.search(self.video_pattern, msg)
+            forward_match = self.match(r"\[CQ:forward,id=([^\]]+?)\]")
+            if forward_match:
+                msg_id = reply_match.groups()[0]
+                forward_msg = get_forward_msg(self.robot, msg_id)
+                msg = str(forward_msg["data"]["messages"])
+                if re.search(self.video_pattern, msg):
+                    url_match = re.search(self.video_pattern, msg)
             if not url_match:
                 return
         elif self.match("下载视频"):
@@ -106,7 +114,15 @@ class Ytdlp(Module):
             msg = reply_msg["data"]["message"]
             if "下载视频" not in msg and "下载视频" not in self.event.msg:
                 return
-            url_match = re.search(self.video_pattern, msg)
+            if re.search(self.video_pattern, msg):
+                url_match = re.search(self.video_pattern, msg)
+            forward_match = self.match(r"\[CQ:forward,id=([^\]]+?)\]")
+            if forward_match:
+                msg_id = reply_match.groups()[0]
+                forward_msg = get_forward_msg(self.robot, msg_id)
+                msg = str(forward_msg["data"]["messages"])
+                if re.search(self.video_pattern, msg):
+                    url_match = re.search(self.video_pattern, msg)
         elif not self.match("下载视频"):
             return
         if not url_match:
