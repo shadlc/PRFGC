@@ -179,12 +179,12 @@ class ExecuteCmd(object):
             msg_id = inputs[0]
             emoji_id = inputs[1] if inputs[1] else 66
             result = set_emoji(self.robot, msg_id, emoji_id)
-            if status_ok(result):
+            if err := result.get("data").get("errMsg"):
+                self.warnf(f"贴表情出错 {err}")
+            else:
                 self.printf(
                     f"向消息{Fore.MAGENTA}[message_id: {msg_id}]{Fore.RESET}贴了表情[id: {emoji_id}]"
                 )
-            else:
-                self.warnf(f"贴表情出错 {result.get("message")}")
         elif (
             self.robot.latest_data
             and self.robot.data[self.robot.latest_data].past_message[-1]
@@ -192,7 +192,7 @@ class ExecuteCmd(object):
             rev = self.robot.data[self.robot.latest_data].past_message[-1]
             msg_id = rev.get("message_id")
             raw_msg = rev.get("message")
-            result = set_emoji(self.robot, msg_id, 66)
+            result = set_emoji(self.robot, msg_id, emoji_id)
             if status_ok(result):
                 self.printf(
                     f"向消息{Fore.MAGENTA}(mg_id: {msg_id}){raw_msg}{Fore.RESET}贴了表情❤"

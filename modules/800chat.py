@@ -21,7 +21,7 @@ from src.utils import (
     get_error,
     get_stranger_info,
     get_user_name,
-    send_forward_msg,
+    set_emoji,
     status_ok,
     via,
     get_msg,
@@ -142,6 +142,7 @@ class Chat(Module):
                     return
                 msg += "请耐心等待..."
                 self.reply(msg, reply=True)
+                set_emoji(self.robot, self.event.msg_id, 60)
                 try:
                     url = self.generate_wordcloud(text)
                     msg = f"[CQ:image,file={url}]"

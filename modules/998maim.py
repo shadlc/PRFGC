@@ -78,8 +78,7 @@ class Maim(Module):
         if not self.config["url"]:
             self.errorf("未配置MaiMBot链接地址，模块已禁用")
             return
-        logger = logging.getLogger('maim_message')
-        logger.setLevel(logging.INFO)
+        logger = logging.getLogger("maim_message")
         apply_formatter(logger, self.ID)
         self.loop = asyncio.get_event_loop()
         self.error_times = 0
@@ -566,8 +565,7 @@ class Maim(Module):
             return image_base64
 
     @via(
-        lambda self: self.at_or_private()
-        and self.au(1)
+        lambda self: self.at_or_private() and self.au(1)
         and self.match(r"^(开启|启用|打开|记录|启动|关闭|禁用|取消)麦麦$")
     )
     def enable_maimbot(self):
@@ -619,6 +617,7 @@ qq_face: dict = {
     "14": "[表情：微笑]",
     "15": "[表情：难过]",
     "16": "[表情：酷]",
+    "17": "[表情：菜刀]",
     "18": "[表情：抓狂]",
     "19": "[表情：吐]",
     "20": "[表情：偷笑]",
@@ -641,6 +640,7 @@ qq_face: dict = {
     "37": "[表情：骷髅]",
     "38": "[表情：敲打]",
     "39": "[表情：再见]",
+    "40": "[表情：撇嘴]",
     "41": "[表情：发抖]",
     "42": "[表情：爱情]",
     "43": "[表情：跳跳]",

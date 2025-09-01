@@ -15,7 +15,7 @@ try:
 except ImportError:
     HAS_PLAYWRIGHT = False
 
-from src.utils import MiniCron, Module, build_node, send_forward_msg, send_msg, via
+from src.utils import MiniCron, Module, build_node, send_forward_msg, send_msg, set_emoji, via
 
 class Bilibili(Module):
     """哔哩哔哩模块"""
@@ -246,6 +246,7 @@ class Bilibili(Module):
             uid = info["uid"]
             name = info["name"]
             if not flag:
+                set_emoji(self.robot, self.event.msg_id, 124)
                 dyn = await self.get_latest_dynamic(int(uid))
                 if dyn:
                     d_type = dyn["dynamic_type"]
@@ -900,7 +901,6 @@ class Bilibili(Module):
         elif "DYNAMIC_TYPE_DRAW" == dynamic_type:
             opus = module_dynamic.get("major", {}).get("opus", {})
             content = opus.get("summary", {}).get("text", "")
-            content += "\n" + opus.get("jump_url", "") + "\n"
             if pics := opus.get("pics"):
                 for pic in pics:
                     imgs.append(pic.get("url"))
@@ -922,7 +922,6 @@ class Bilibili(Module):
                 imgs.append(cover)
         return {
             "url": url,
-            "jump_url": url,
             "dynamic_id": dynamic_id,
             "dynamic_type": dynamic_type,
             "author": author,

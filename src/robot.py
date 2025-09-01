@@ -92,6 +92,7 @@ class Concerto:
                 self.at_info = "[CQ:at,qq=" + str(self.self_id) + "]"
                 self.printf(f"已接入账号: {Fore.MAGENTA}{self.self_name}({self.self_id}){Fore.RESET}")
             except httpx.RequestError:
+                time.sleep(1)
                 continue
             time.sleep(1)
         self.import_modules()

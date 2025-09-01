@@ -1,15 +1,18 @@
 """视频下载模块"""
 
 import base64
+import logging
 import os
+from pathlib import Path
 import re
 from http.cookiejar import LoadError
 import time
 
+import traceback
 import urllib
 from yt_dlp import YoutubeDL, DownloadError
 
-from src.utils import Module, build_node, calc_size, calc_time, format_to_log, get_forward_msg, get_image_base64, get_msg, status_ok, via
+from src.utils import Module, apply_formatter, build_node, calc_size, calc_time, format_to_log, get_forward_msg, get_image_base64, get_msg, set_emoji, status_ok, via
 
 class Ytdlp(Module):
     """视频下载模块"""
@@ -24,6 +27,7 @@ class Ytdlp(Module):
     CONFIG = "ytdlp.json"
     GLOBAL_CONFIG = {
         "base_path": "ytdlp",
+        "video_path": "", # 如果不使用base64传输，则填入此路径，应该保证QQ API部分程序能获取到相同的对应路径下的文件
         "headers": {},
         "ydl": {
             "paths": {
@@ -36,7 +40,7 @@ class Ytdlp(Module):
             "proxy": "",
             "extractor_args": "youtubetab:skip=authcheck youtube:player-client=web",
             "merge_output_format": "mp4",
-            "format": "wv+wa",
+            "format": "bv*+ba/b",
         },
     }
     CONV_CONFIG = {
@@ -46,16 +50,16 @@ class Ytdlp(Module):
     }
 
     def __init__(self, event, auth = 0):
-        self.video_pattern = r"(https?://[^\"]*(b23.tv|bilibili.com|youtu.be|youtube.com|v.qq.com|douyin.com|tiktok.com)[^\s?@]*)"
+        self.video_pattern = r"(https?://[^\s?@;,\"]*(b23.tv|bilibili.com|youtu.be|youtube.com|v.qq.com|douyin.com|tiktok.com)[^\s?@;,\"]*)"
         super().__init__(event, auth)
 
     @via(lambda self: self.at_or_private() and self.au(2)
             and self.config[self.owner_id]["enable"]
             and (self.match(r"\[CQ:reply,id=([^\]]+?)\]")
-            or self.match(self.video_pattern)), success=False)
+            or self.match("视频详情")), success=False)
     def info(self):
-        """获取视频信息"""
-        url_match = self.match(self.video_pattern)
+        """获取视频详情"""
+        url_match = self.match(rf"^视?频?详?情?\s?({self.video_pattern})\s?视?频?详?情?$")
         reply_match = self.match(r"\[CQ:reply,id=([^\]]+?)\]")
         url = ""
         if reply_match:
@@ -64,7 +68,7 @@ class Ytdlp(Module):
             msg = reply_msg["data"]["message"].replace("\\", "")
             if not status_ok(reply_msg):
                 return
-            if re.search("下载视频", msg) or re.search("下载视频", self.event.msg):
+            if "视频详情" not in msg and "视频详情" not in self.event.msg:
                 return
             if re.search(self.video_pattern, msg):
                 url_match = re.search(self.video_pattern, msg)
@@ -75,16 +79,17 @@ class Ytdlp(Module):
                 msg = str(forward_msg["data"]["messages"])
                 if re.search(self.video_pattern, msg):
                     url_match = re.search(self.video_pattern, msg)
-            if not url_match:
-                return
-        elif self.match("下载视频"):
+        elif not self.match("视频详情"):
+            return
+        if not url_match:
             return
         url = url_match.groups()[0]
         opts = self.get_option(url)
         try:
+            set_emoji(self.robot, self.event.msg_id, 124)
             info = self.get_info(url, opts)
             msg = self.parse_info(info)
-            if "entries" in info:
+            if info.get("type") == "playlist":
                 msg = f"解析成功，但不支持下载视频合辑，请使用单集链接!\n{msg}"
             else:
                 msg = f"视频解析成功!\n{msg}"
@@ -96,14 +101,17 @@ class Ytdlp(Module):
         except DownloadError as e:
             nodes = build_node(f"{format_to_log(e.msg)}")
             return self.reply_forward(nodes, source="视频解析失败")
+        except Exception as e:
+            nodes = build_node(f"{e}")
+            return self.reply_forward(nodes, source="视频解析失败")
 
     @via(lambda self: self.at_or_private() and self.au(2)
             and self.config[self.owner_id]["enable"]
             and (self.match(r"\[CQ:reply,id=([^\]]+?)\]")
-            or self.match("下载视频")), success=False)
+            or self.match(self.video_pattern)), success=False)
     def download(self):
         """下载视频"""
-        url_match = self.match(self.video_pattern)
+        url_match = self.match(rf"^({self.video_pattern})$")
         reply_match = self.match(r"\[CQ:reply,id=([^\]]+?)\]")
         url = ""
         if reply_match:
@@ -111,8 +119,8 @@ class Ytdlp(Module):
             reply_msg = get_msg(self.robot, msg_id)
             if not status_ok(reply_msg):
                 return
-            msg = reply_msg["data"]["message"]
-            if "下载视频" not in msg and "下载视频" not in self.event.msg:
+            msg = reply_msg["data"]["message"].replace("\\", "")
+            if "视频详情" in msg or "视频详情" in self.event.msg:
                 return
             if re.search(self.video_pattern, msg):
                 url_match = re.search(self.video_pattern, msg)
@@ -123,15 +131,22 @@ class Ytdlp(Module):
                 msg = str(forward_msg["data"]["messages"])
                 if re.search(self.video_pattern, msg):
                     url_match = re.search(self.video_pattern, msg)
-        elif not self.match("下载视频"):
+        elif self.match("视频详情"):
             return
         if not url_match:
             return
+        video_path = ""
+        tasks = self.config[self.owner_id]["tasks"]
+        url = url_match.groups()[0]
+        opts = self.get_option(url)
         try:
-            tasks = self.config[self.owner_id]["tasks"]
-            url = url_match.groups()[0]
-            opts = self.get_option(url)
+            set_emoji(self.robot, self.event.msg_id, 124)
             info = self.get_info(url, opts)
+            if info.get("type") == "playlist":
+                msg = self.parse_info(info)
+                msg = f"解析成功，但不支持下载视频合辑，请使用单集链接!\n{msg}"
+                self.reply(msg)
+                return
             user_id = self.event.user_id
             user_task = tasks.get(user_id)
             cool_down = self.config[self.owner_id]["cool_down"]
@@ -139,7 +154,7 @@ class Ytdlp(Module):
                 pass
             elif user_task and time.time() - int(user_task[-1][2]) < cool_down:
                 remain = int(cool_down - time.time() + int(user_task[-1][2]))
-                self.reply(f"视频下载功能每{cool_down}秒才能使用一次，你还剩{remain}秒", reply=True)
+                self.reply(f"视频解析功能每{cool_down}秒才能使用一次，你还剩{remain}秒", reply=True)
                 return
             if user_id not in self.config[self.owner_id]["tasks"]:
                 self.config[self.owner_id]["tasks"][user_id] = []
@@ -147,29 +162,66 @@ class Ytdlp(Module):
                 info["url"], user_id, str(int(time.time()))
             ])
             self.save_config()
-            name = info["title"]
-            if info["series"]:
-                name = f"{info["series"]} {info["title"]}"
-            msg = f"正在解析视频[{name}]，请耐心等待"
-            self.reply(msg, reply=True)
+            if info["duration"] > 600:
+                name = info["title"]
+                if series := info["series"]:
+                    name = f"{series} {name}"
+                if uploader := info["uploader"]:
+                    name = f"{uploader}上传的视频[{name}]"
+                else:
+                    name = f"视频[{name}]"
+                msg = f"视频大于十分钟,仅能使用最低分辨率下载，正在解析{name}，请耐心等待"
+                self.reply(msg, reply=True)
+                opts["format"] = "wv+ba/w"
+            elif info["duration"] > 300:
+                opts["format"] = "bv[height<=1000]+ba/b"
+            set_emoji(self.robot, self.event.msg_id, 60)
             ext = self.config["ydl"]["merge_output_format"]
-            video_path = self.download_video(info["url"], opts)
-            video_path = f"{video_path}.{ext}"
-            with open(video_path, "rb") as video_file:
-                video_bytes = video_file.read()
-                base64_bytes = base64.b64encode(video_bytes)
-                base64_string = base64_bytes.decode("utf-8")
-                msg = f"[CQ:video,file=base64://{base64_string}]"
+            dir_path = Path(self.download_video(info["url"], opts)).as_posix()
+            file_path = f"{dir_path}.{ext}"
+            video_name = file_path.split("/").pop()
+            set_emoji(self.robot, self.event.msg_id, 66)
+            if video_path := self.config["video_path"]:
+                video_path = Path(os.path.join(video_path, video_name)).as_posix()
+                msg = f"[CQ:video,file=file://{urllib.parse.quote(video_path)}]"
                 self.reply(msg)
-            os.remove(video_path)
+            else:
+                with open(file_path, "rb") as video_file:
+                    video_bytes = video_file.read()
+                    base64_bytes = base64.b64encode(video_bytes)
+                    base64_string = base64_bytes.decode("utf-8")
+                    msg = f"[CQ:video,file=base64://{base64_string}]"
+                    self.reply(msg)
         except LoadError:
             # http://fileformats.archiveteam.org/wiki/Netscape_cookies.txt
             return self.reply("Cookie载入失败! 请联系管理员", reply=True)
         except DownloadError as e:
-            self.config[self.owner_id]["tasks"][user_id].pop()
             nodes = build_node(f"{format_to_log(e.msg)}")
             return self.reply_forward(nodes, source="视频解析失败")
+        except Exception:
+            nodes = build_node(f"{traceback.format_exc()}")
+            return self.reply_forward(nodes, source="视频处理失败")
+        finally:
+            if os.path.exists(video_path):
+                os.remove(video_path)
         self.success = True
+
+    @via(
+        lambda self: self.at_or_private() and self.au(1)
+        and self.match(r"^(开启|启用|打开|记录|启动|关闭|禁用|取消)视频(解析|下载)?(功能)?$")
+    )
+    def enable(self):
+        """启用视频模块功能"""
+        msg = ""
+        if self.match(r"(开启|启用|打开|记录|启动)"):
+            self.config[self.owner_id]["enable"] = True
+            msg = "视频解析功能已开启"
+            self.save_config()
+        elif self.match(r"(关闭|禁用|取消)"):
+            self.config[self.owner_id]["enable"] = False
+            msg = "视频解析功能已关闭"
+            self.save_config()
+        self.reply(msg)
 
     def get_option(self, url: str) -> dict:
         """获取配置参数"""
@@ -262,7 +314,8 @@ class Ytdlp(Module):
         resolution = info.get("resolution")
         size = info.get("size")
         view_count = info.get("view_count")
-        view_count = f"{round(view_count/10000,2)}万" if view_count >= 10000 else view_count
+        if view_count:
+            view_count = f"{round(view_count/10000,2)}万" if view_count >= 10000 else view_count
         if video_type == "playlist":
             msg = f"链接: {url}\n"
             msg += f"平台: {site}\n"
