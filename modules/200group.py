@@ -13,7 +13,6 @@ class Group(Module):
             "为[QQ账号或昵称](设置)头衔[头衔] | 为用户设置专属头衔(机器人需为群主)",
         ],
     }
-    CONFIG = "group.json"
     GLOBAL_CONFIG = None
     CONV_CONFIG = None
 

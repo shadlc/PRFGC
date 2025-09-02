@@ -59,7 +59,6 @@ class Maim(Module):
             "[开启|关闭]麦麦 | 开启或关闭麦麦机器人功能",
         ],
     }
-    CONFIG = "maimbot.json"
     GLOBAL_CONFIG = {
         "platform": "qq",
         "url": "",

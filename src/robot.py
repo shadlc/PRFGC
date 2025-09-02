@@ -307,33 +307,36 @@ class Concerto:
         self.module_handle(event, "event", auth)
 
     def import_modules(self):
-        """导入modules内的模块"""
+        """导入 modules 目录及其子目录内的模块"""
         def import_classes(folder_path):
-            for item in sorted(os.listdir(folder_path)):
-                item_path = os.path.join(folder_path, item)
-                if item.endswith(".py"):
-                    module_name = os.path.splitext(item)[0]
-                    missing = scan_missing_modules(item_path)
-                    if missing:
-                        self.errorf(f"文件({item})缺失模块: {" ".join(missing)}, 加载失败!")
-                        continue
-                    spec = importlib.util.spec_from_file_location(module_name, item_path)
-                    module = importlib.util.module_from_spec(spec)
-                    spec.loader.exec_module(module)
-                    is_module = False
-                    disabled = False
-                    for _, obj in list(vars(module).items()):
-                        if isinstance(obj, type) and hasattr(obj, "ID") and obj.ID and hasattr(obj, "NAME") and obj.NAME:
-                            if obj.ID in self.config.disabled:
-                                self.printf(f"[{obj.ID}] 文件({item})有效, 但已禁用, 取消加载模块!")
-                                disabled = True
-                                continue
-                            is_module = True
-                            self.module_enable(obj, item)
-                            if hasattr(obj, "AUTO_INIT") and obj.AUTO_INIT:
-                                obj(Event(self))
-                    if not is_module and not disabled:
-                        self.warnf(f"文件[{item}]内没有有效的模块, 已取消加载!")
+            py_files = []
+            for root, _, files in os.walk(folder_path):
+                py_files += [os.path.join(root, f) for f in files if f.endswith(".py")]
+            py_files.sort(key=os.path.basename)
+            for item_path in py_files:
+                item = os.path.basename(item_path)
+                module_name = os.path.splitext(item)[0]
+                missing = scan_missing_modules(item_path)
+                if missing:
+                    self.errorf(f"文件({item})缺失模块: {" ".join(missing)}, 加载失败!")
+                    continue
+                spec = importlib.util.spec_from_file_location(module_name, item_path)
+                module = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(module)
+                is_module = False
+                disabled = False
+                for _, obj in list(vars(module).items()):
+                    if isinstance(obj, type) and hasattr(obj, "ID") and obj.ID and hasattr(obj, "NAME") and obj.NAME:
+                        if obj.ID in self.config.disabled:
+                            self.printf(f"[{obj.ID}] 文件({item})有效, 但已禁用, 取消加载模块!")
+                            disabled = True
+                            continue
+                        is_module = True
+                        self.module_enable(obj, item)
+                        if getattr(obj, "AUTO_INIT", False):
+                            obj(Event(self))
+                if not is_module and not disabled:
+                    self.warnf(f"文件[{item}]内没有有效的模块, 已取消加载!")
         import_classes("modules")
 
     def module_enable(self, module: Module, module_file: str):

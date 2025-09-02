@@ -48,9 +48,7 @@ class Chat(Module):
             "词云配色 [配色代码] | 更改词云配色",
         ],
     }
-    CONFIG = "chat.json"
     GLOBAL_CONFIG = {
-        "base_path": "chat",
         "database": "data.db",
         "font": "MiSans-Bold.ttf",
         "stopwords": "stopwords.txt",
@@ -342,13 +340,6 @@ class Chat(Module):
             return name
         return 0
 
-    def get_db_path(self):
-        """返回数据库文件路径"""
-        os.makedirs(os.path.join(self.robot.config.data_path, self.config["base_path"]), exist_ok=True)
-        return os.path.join(
-            self.robot.config.data_path, self.config["base_path"], self.config["database"]
-        )
-
     def init_wordcloud_db(self, conn: sqlite3.Connection):
         """确保 wordcloud 表存在。表结构：
         id, owner_id, user_id, user_name, message, timestamp
@@ -379,7 +370,7 @@ class Chat(Module):
             if ts is None:
                 ts = datetime.datetime.now()
             date = ts.strftime("%Y%m%d")
-            db = self.get_db_path()
+            db = self.get_data_path(self.config["database"])
             conn = sqlite3.connect(db)
             self.init_wordcloud_db(conn)
             cur = conn.cursor()
@@ -410,7 +401,7 @@ class Chat(Module):
         last_week, this_month, last_month, this_year, last_year, all
         """
         try:
-            wordcloud_db = self.get_db_path()
+            wordcloud_db = self.get_data_path(self.config["database"])
             date_range = self.get_date_range(gen_type)
 
             query = "SELECT text FROM wordcloud"
@@ -486,9 +477,7 @@ class Chat(Module):
         """生成词云图片并返回 base64 URI(base64://...)"""
 
         stopwords = set()
-        stopwords_path = os.path.join(
-            self.robot.config.data_path, self.config["base_path"], self.config["stopwords"]
-        )
+        stopwords_path = self.get_data_path(self.config["stopwords"])
         try:
             with open(stopwords_path, "r", encoding="utf-8") as f:
                 lines = [l.strip() for l in f]
@@ -526,7 +515,7 @@ class Chat(Module):
             wc_kwargs["colormap"] = colormap
 
         # 字体
-        font_path = os.path.join(self.robot.config.data_path, self.config["base_path"], self.config["font"])
+        font_path = self.get_data_path(self.config["font"])
         if not os.path.exists(font_path):
             font_path = ""
             candidates = ["SimHei", "SimSun", "Microsoft YaHei", "STHeiti",
@@ -638,7 +627,7 @@ class Chat(Module):
                 return
             if ts is None:
                 ts = datetime.datetime.now()
-            db_path = self.get_db_path()
+            db_path = self.get_data_path(self.config["database"])
             conn = sqlite3.connect(db_path)
             self.init_repeat_db(conn)
             cursor = conn.cursor()
@@ -658,7 +647,7 @@ class Chat(Module):
 
     def get_repeat_record(self, gen_type="all"):
         """获取复读记录"""
-        db_path = self.get_db_path()
+        db_path = self.get_data_path(self.config["database"])
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
 

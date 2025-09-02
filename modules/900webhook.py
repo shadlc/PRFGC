@@ -27,7 +27,6 @@ class Webhook(Module):
             "开启/关闭 | 开启或关闭外部请求通知",
         ],
     }
-    CONFIG = "webhook.json"
     GLOBAL_CONFIG = {
       "host": "127.0.0.1",
       "port": 3109,

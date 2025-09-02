@@ -9,6 +9,7 @@ import inspect
 import io
 import logging
 import os
+from pathlib import Path
 import re
 import html
 import socket
@@ -275,7 +276,7 @@ def msg_img2char(config: Config, msg: str):
     matches = re.findall(r"(\[CQ:image.*?url=([^,]*).*\])", msg)
     for cq, url in matches:
         try:
-            data = httpx.Client().get(url, timeout=3)
+            data = httpx.Client().get(url, timeout=10)
             img = Image.open(io.BytesIO(data.content)).convert("RGB")
             w, h = img.size
             ratio = h / float(w)
@@ -791,6 +792,19 @@ def send_like(robot: "Concerto", user_id: str, times: int):
     resp_dict = {"user_id": user_id, "times": times}
     return api.send_like(robot, resp_dict)
 
+def upload_file(robot: "Concerto", file: str, name: str, user_id: str | None=None, group_id: str | None=None, folder_id: str | None=None):
+    """
+    上传文件
+    :param file: 文件路径
+    :param name: 文件名
+    :param user_id: 用户ID
+    :param group_id: 群ID
+    """
+    if group_id:
+        api.upload_group_file(robot, {"group_id": group_id, "file": file, "name": name, "folder_id": folder_id})
+    else:
+        api.upload_private_file(robot, {"user_id": user_id, "file": file, "name": name})
+
 def send_group_ai_record(robot: "Concerto", group_id: str, character: str, text: str):
     """
     发送群AI语音
@@ -1051,7 +1065,6 @@ class Module:
     ID = None
     NAME = None
     HELP = None
-    CONFIG = None
     GLOBAL_CONFIG = None
     CONV_CONFIG = None
     AUTO_INIT = None
@@ -1121,10 +1134,9 @@ class Module:
 
     def init_config(self):
         """初始化模块数据"""
-        # 初始化配置
-        if self.CONFIG is None:
+        if self.GLOBAL_CONFIG is None:
             return
-        self.config_file = os.path.join(self.robot.config.data_path, self.CONFIG)
+        self.config_file = os.path.join(self.robot.config.data_path, f"{str(self.ID).lower()}.json")
         try:
             self.config = import_json(self.config_file)
         except Exception:
@@ -1132,7 +1144,6 @@ class Module:
             self.errorf(f"配置文件 {self.config_file} 解析发生错误!\n{traceback.format_exc()}")
         self.GLOBAL_CONFIG = self.GLOBAL_CONFIG or {}
         self.config = merge(self.GLOBAL_CONFIG, self.config)
-        self.save_config()
         # 设定会话的owner_id
         if self.event.group_id:
             self.owner_id = f"g{self.event.group_id}"
@@ -1143,6 +1154,7 @@ class Module:
         # 读取指定会话的数据与配置文件
         self.data = self.robot.data.get(self.owner_id)
         if self.CONV_CONFIG is None:
+            self.save_config()
             return
         if self.owner_id not in self.config:
             self.config[self.owner_id] = {}
@@ -1160,6 +1172,13 @@ class Module:
             save_json(self.config_file, self.config)
         except Exception:
             self.errorf(f"配置文件 {self.config_file} 保存失败!\n{traceback.format_exc()}")
+
+    def get_data_path(self, *paths: str) -> str:
+        """获取配置文件夹"""
+        path = os.path.join(self.robot.config.data_path, str(self.ID).lower(), *paths)
+        dir_path = path if os.path.splitext(path)[1] == "" else os.path.dirname(path)
+        os.makedirs(dir_path, exist_ok=True)
+        return Path(path).as_posix()
 
     def reply(self, msg, reply=False, force=False):
         """快捷回复消息"""

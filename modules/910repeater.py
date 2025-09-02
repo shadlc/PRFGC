@@ -21,7 +21,6 @@ class Repeater(Module):
             "禁止复读[关键词] | 不再对指定关键词进行复读",
         ],
     }
-    CONFIG = "repeater.json"
     GLOBAL_CONFIG = {}
     CONV_CONFIG = {
         "repeat": True,

@@ -12,7 +12,7 @@ import traceback
 import urllib
 from yt_dlp import YoutubeDL, DownloadError
 
-from src.utils import Module, apply_formatter, build_node, calc_size, calc_time, format_to_log, get_forward_msg, get_image_base64, get_msg, set_emoji, status_ok, via
+from src.utils import Module, build_node, calc_size, calc_time, format_to_log, get_forward_msg, get_image_base64, get_msg, set_emoji, status_ok, via
 
 class Ytdlp(Module):
     """视频下载模块"""
@@ -20,13 +20,14 @@ class Ytdlp(Module):
     ID = "Ytdlp"
     NAME = "视频下载模块"
     HELP = {
-        2: [
-            "本模块主要是为了方便在不打开视频链接的情况下观看视频使用，回复视频链接、小程序并@即可获取视频文件",
+        0: [
+            "本模块主要是为了方便在不打开视频链接的情况下观看视频使用，回复视频链接、小程序并@即可获取视频文件，如果同时带有“视频详情”四个字，则仅解析视频详情",
+        ],
+        1: [
+            "[开启|关闭]视频解析 | 开关本模块功能",
         ],
     }
-    CONFIG = "ytdlp.json"
     GLOBAL_CONFIG = {
-        "base_path": "ytdlp",
         "video_path": "", # 如果不使用base64传输，则填入此路径，应该保证QQ API部分程序能获取到相同的对应路径下的文件
         "headers": {},
         "ydl": {
@@ -50,7 +51,7 @@ class Ytdlp(Module):
     }
 
     def __init__(self, event, auth = 0):
-        self.video_pattern = r"(https?://[^\s?@;,\"]*(b23.tv|bilibili.com|youtu.be|youtube.com|v.qq.com|douyin.com|tiktok.com)[^\s?@;,\"]*)"
+        self.video_pattern = r"(https?://[^\s@&;,\"]*(b23.tv|bilibili.com/video|youtu.be|youtube.com|v.qq.com|douyin.com|tiktok.com)[^\s@&;,\"]*)"
         super().__init__(event, auth)
 
     @via(lambda self: self.at_or_private() and self.au(2)
@@ -72,19 +73,13 @@ class Ytdlp(Module):
                 return
             if re.search(self.video_pattern, msg):
                 url_match = re.search(self.video_pattern, msg)
-            forward_match = self.match(r"\[CQ:forward,id=([^\]]+?)\]")
-            if forward_match:
-                msg_id = reply_match.groups()[0]
-                forward_msg = get_forward_msg(self.robot, msg_id)
-                msg = str(forward_msg["data"]["messages"])
-                if re.search(self.video_pattern, msg):
-                    url_match = re.search(self.video_pattern, msg)
         elif not self.match("视频详情"):
             return
         if not url_match:
             return
+        self.success = True
         url = url_match.groups()[0]
-        opts = self.get_option(url)
+        opts = self.get_options(url)
         try:
             set_emoji(self.robot, self.event.msg_id, 124)
             info = self.get_info(url, opts)
@@ -94,7 +89,6 @@ class Ytdlp(Module):
             else:
                 msg = f"视频解析成功!\n{msg}"
             self.reply(msg, reply=True)
-            self.success = True
         except LoadError:
             # http://fileformats.archiveteam.org/wiki/Netscape_cookies.txt
             return self.reply("Cookie载入失败! 请联系管理员", reply=True)
@@ -124,21 +118,15 @@ class Ytdlp(Module):
                 return
             if re.search(self.video_pattern, msg):
                 url_match = re.search(self.video_pattern, msg)
-            forward_match = self.match(r"\[CQ:forward,id=([^\]]+?)\]")
-            if forward_match:
-                msg_id = reply_match.groups()[0]
-                forward_msg = get_forward_msg(self.robot, msg_id)
-                msg = str(forward_msg["data"]["messages"])
-                if re.search(self.video_pattern, msg):
-                    url_match = re.search(self.video_pattern, msg)
         elif self.match("视频详情"):
             return
         if not url_match:
             return
+        self.success = True
         video_path = ""
         tasks = self.config[self.owner_id]["tasks"]
         url = url_match.groups()[0]
-        opts = self.get_option(url)
+        opts = self.get_options(url)
         try:
             set_emoji(self.robot, self.event.msg_id, 124)
             info = self.get_info(url, opts)
@@ -178,7 +166,9 @@ class Ytdlp(Module):
             set_emoji(self.robot, self.event.msg_id, 60)
             ext = self.config["ydl"]["merge_output_format"]
             dir_path = Path(self.download_video(info["url"], opts)).as_posix()
-            file_path = f"{dir_path}.{ext}"
+            file_path = dir_path
+            if not os.path.exists(dir_path):
+                file_path = f"{dir_path}.{ext}"
             video_name = file_path.split("/").pop()
             set_emoji(self.robot, self.event.msg_id, 66)
             if video_path := self.config["video_path"]:
@@ -204,7 +194,6 @@ class Ytdlp(Module):
         finally:
             if os.path.exists(video_path):
                 os.remove(video_path)
-        self.success = True
 
     @via(
         lambda self: self.at_or_private() and self.au(1)
@@ -223,7 +212,7 @@ class Ytdlp(Module):
             self.save_config()
         self.reply(msg)
 
-    def get_option(self, url: str) -> dict:
+    def get_options(self, url: str) -> dict:
         """获取配置参数"""
         opts = self.config["ydl"].copy()
         cookie_path = self.get_cookie(url)
@@ -233,7 +222,7 @@ class Ytdlp(Module):
 
     def get_cookie(self, url: str) -> str:
         """获取Cookie"""
-        cookies_path = os.path.join(self.robot.config.data_path, self.config["base_path"], "cookies")
+        cookies_path = self.get_data_path("cookies")
         os.makedirs(cookies_path, exist_ok=True)
         path = None
         if re.search(r"(b23.tv|bilibili.com)", url):
@@ -260,7 +249,7 @@ class Ytdlp(Module):
                 self.warnf(f"获取重定向url失败! {e}")
         info = YoutubeDL(opts).extract_info(url, download=False, process=False)
         url = info.get("webpage_url", "")
-        url = url.split("?")[0]
+        url = url.split("&")[0]
         site = info.get("extractor", "")
         series = info.get("series", "")
         title = info.get("title", "[未知]")

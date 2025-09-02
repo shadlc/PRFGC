@@ -30,7 +30,6 @@ class Waifu(Module):
             "查老婆@某人 | 查询别人老婆",
         ],
     }
-    CONFIG = "waifu.json"
     GLOBAL_CONFIG = {
         "pic_path": "waifu",
         "pic_url": "",
@@ -155,7 +154,7 @@ class Waifu(Module):
     def save_waifu(self, url: str, name: str):
         """保存二次元老婆"""
         pic_path = self.get_path()
-        data = httpx.Client().get(url, timeout=3)
+        data = httpx.Client().get(url, timeout=10)
         data.raise_for_status()
         fmt = imghdr.what(None, h=data.content)
         file_path = os.path.join(pic_path, f"{name}.{fmt}")

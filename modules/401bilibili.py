@@ -37,7 +37,6 @@ class Bilibili(Module):
             "[UP主] 通知 [开启|关闭] | 开关UP主的通知",
         ],
     }
-    CONFIG = "bilibili.json"
     GLOBAL_CONFIG = {
         "env": {
             "sessdata": "",

@@ -15,7 +15,6 @@ class Notice(Module):
     ID = "Notice"
     NAME = "基础通知处理模块"
     HELP = None
-    CONFIG = "data.json"
     GLOBAL_CONFIG = None
     CONV_CONFIG = None
     HANDLE_NOTICE = True

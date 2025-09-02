@@ -75,9 +75,7 @@ class RPG(Module):
         "躁狂：调查员通过一次D100或者由守秘人选择，来从躁狂症状表中选择一个躁狂的诱因。"
     ]
 
-    CONFIG = "rpg.json"
     GLOBAL_CONFIG = {
-        "base_path": "rpg",
         "database": "data.db",
         "max_log_entries": 100  # 最大日志条目数
     }
@@ -88,13 +86,6 @@ class RPG(Module):
         "special_dice": {},
         "logs": []  # 新增日志记录
     }
-
-    def get_db_path(self):
-        """返回数据库文件路径"""
-        os.makedirs(os.path.join(self.robot.config.data_path, self.config["base_path"]), exist_ok=True)
-        return os.path.join(
-            self.robot.config.data_path, self.config["base_path"], self.config["database"]
-        )
 
     def init_rpg_db(self, conn: sqlite3.Connection):
         """确保 RPG 表存在"""
@@ -157,7 +148,7 @@ class RPG(Module):
             self.config[self.owner_id]["logs"] = self.config[self.owner_id]["logs"][-max_logs:]
 
         # 数据库中的日志记录
-        db_path = self.get_db_path()
+        db_path = self.get_data_path(self.config["database"])
         conn = sqlite3.connect(db_path)
         self.init_rpg_db(conn)
         cur = conn.cursor()
@@ -176,7 +167,7 @@ class RPG(Module):
         if user_id is None:
             user_id = self.event.user_id
 
-        db_path = self.get_db_path()
+        db_path = self.get_data_path(self.config["database"])
         conn = sqlite3.connect(db_path)
         self.init_rpg_db(conn)
         cur = conn.cursor()
@@ -201,7 +192,7 @@ class RPG(Module):
         if user_id is None:
             user_id = self.event.user_id
 
-        db_path = self.get_db_path()
+        db_path = self.get_data_path(self.config["database"])
         conn = sqlite3.connect(db_path)
         self.init_rpg_db(conn)
         cur = conn.cursor()
@@ -880,7 +871,7 @@ class RPG(Module):
                 user_name = get_user_name(self.robot, target_id)
                 msg = f"{user_name} 尚未建立人物卡"
         elif self.match(r"^\.pc del$"):
-            db_path = self.get_db_path()
+            db_path = self.get_data_path(self.config["database"])
             conn = sqlite3.connect(db_path)
             self.init_rpg_db(conn)
             cur = conn.cursor()

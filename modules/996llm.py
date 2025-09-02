@@ -15,7 +15,6 @@ class LLM(Module):
     ID = "LLM"
     NAME = "LLM模块"
     HELP = {} # 本模块目前主要为内部其他模块和功能提供LLM接入能力
-    CONFIG = "llm.json"
     GLOBAL_CONFIG = {
         "providers": [],
         "models": [],

@@ -33,7 +33,6 @@ class Message(Module):
             "计时 [数字] | 进行异步计时",
         ]
     }
-    CONFIG = "data.json"
     GLOBAL_CONFIG = {
         "ip_test_token": ""
     }
@@ -242,7 +241,7 @@ class Message(Module):
             url = f"https://api.ip138.com/ip/?ip={ip}"
             msg = ""
             try:
-                data = httpx.Client().get(url, headers=headers, timeout=3).json()
+                data = httpx.Client().get(url, headers=headers, timeout=10).json()
                 if data.get("ret") != "ok":
                     msg = f"ip138.com返回为空: {data.get("msg")}"
                 else:
