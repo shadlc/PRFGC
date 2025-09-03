@@ -2,6 +2,7 @@
 
 import asyncio
 import base64
+import random
 import re
 import threading
 import time
@@ -68,6 +69,7 @@ class Bilibili(Module):
         if self.ID in self.robot.persist_mods:
             return
         self.robot.persist_mods[self.ID] = self
+        self.live_status = {}
         self.dynamics = {}
         self.browser = None
         self.loop = asyncio.new_event_loop()
@@ -84,6 +86,7 @@ class Bilibili(Module):
         )
         if self.ID in self.robot.persist_mods:
             bilibili: Bilibili = self.robot.persist_mods[self.ID]
+            self.live_status = bilibili.live_status
             self.dynamics = bilibili.dynamics
             self.browser = bilibili.browser
             self.loop = bilibili.loop
@@ -182,7 +185,6 @@ class Bilibili(Module):
                     "name": name,
                     "avatar": avatar,
                     "fans": fans,
-                    "live": False,
                     "keyword": "",
                     "dynamic_notice": True,
                     "live_notice": True,
@@ -306,11 +308,7 @@ class Bilibili(Module):
                         msg += f"\n链接: https://live.bilibili.com/{room_id}"
                         if cover:
                             msg += f"\n[CQ:image,file={cover}]"
-                        self.config[self.owner_id]["sub"][uid]["live"] = True
-                        self.save_config()
                     else:
-                        self.config[self.owner_id]["sub"][uid]["live"] = False
-                        self.save_config()
                         msg = f"{name}还在休息中哦~"
                 else:
                     msg = f"{name}从来没有直播过哦~"
@@ -508,11 +506,12 @@ class Bilibili(Module):
         if len(uid_list) == 0:
             return
         for uid in uid_list:
+            delay = interval + random.randint(0, 10)
             name = self.get_local_name(uid)
             if uid not in self.dynamics or len(self.dynamics[uid]) == 0:
                 dynamics = await self.get_user_dynamics(uid)
                 if len(dynamics) == 0:
-                    await asyncio.sleep(3)
+                    await asyncio.sleep(delay)
                     continue
                 self.printf(f"已初始化{name}({uid})的动态共{len(dynamics)}条")
                 self.dynamics[uid] = dynamics
@@ -520,7 +519,7 @@ class Bilibili(Module):
                 continue
             dynamics = await self.get_new_dynamics(uid)
             if not dynamics:
-                await asyncio.sleep(3)
+                await asyncio.sleep(delay)
                 continue
             self.printf(f"{name}({uid})发布了新动态{len(dynamics)}条")
             notice_list = self.get_notice_list("dynamic", uid)
@@ -559,14 +558,15 @@ class Bilibili(Module):
                         self.reply_forward_back(owner_id, nodes, title)
                         await asyncio.sleep(3)
                 await asyncio.sleep(3)
-            await asyncio.sleep(interval)
+            await asyncio.sleep(delay)
 
-    async def live_check(self, interval=10):
+    async def live_check(self, interval=5):
         """直播检查"""
         uid_list = self.get_uid_list("live")
         if len(uid_list) == 0:
             return
         for uid in uid_list:
+            delay = interval + random.randint(0, 5)
             info = await self.get_user_simple_info(uid)
             if not info:
                 await asyncio.sleep(3)
@@ -575,12 +575,14 @@ class Bilibili(Module):
             title = info["live_room"].get("title")
             cover = info["live_room"].get("cover")
             room_id = info["live_room"].get("roomid")
-            live_status = self.config[self.owner_id]["sub"][uid]["live"]
-            if live_status == status:
+            if uid not in self.live_status:
+                self.live_status[uid] = status
                 await asyncio.sleep(3)
                 continue
-            self.config[self.owner_id]["sub"][uid]["live"] = status
-            self.save_config()
+            if self.live_status[uid] == status:
+                await asyncio.sleep(3)
+                continue
+            self.live_status[uid] = status
             if not status:
                 await asyncio.sleep(3)
                 continue
@@ -594,14 +596,15 @@ class Bilibili(Module):
                     msg += f"\n[CQ:image,file={cover}]"
                 self.reply_back(owner_id, msg)
                 await asyncio.sleep(3)
-            await asyncio.sleep(interval)
+            await asyncio.sleep(delay)
 
-    async def fans_check(self, interval=10):
+    async def fans_check(self, interval=5):
         """粉丝数检查"""
         uid_list = self.get_uid_list("fans")
         if len(uid_list) == 0:
             return
         for uid in uid_list:
+            delay = interval + random.randint(0, 5)
             info = await self.get_user_simple_info(uid, fans=True)
             if info:
                 name = info["name"]
@@ -659,7 +662,7 @@ class Bilibili(Module):
                     self.update_follow_list_info(uid, {"fans": fans})
                     self.reply_back(owner_id, msg)
                     await asyncio.sleep(3)
-            await asyncio.sleep(interval)
+            await asyncio.sleep(delay)
 
     def get_follow_list_info(self, uid: str, key):
         """获取关注列表信息"""

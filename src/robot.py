@@ -128,7 +128,8 @@ class Concerto:
             )
 
         # 数据存储到对应的data中, 并获取data
-        if user_id == self.self_id or user_id in self.config.blacklist:
+        data = {}
+        if user_id in self.config.blacklist:
             pass
         elif group_id:
             if ("g" + str(group_id)) not in self.data:
@@ -146,7 +147,7 @@ class Concerto:
             data = self.data["u" + str(self.self_id)]
 
         # 分类处理消息，不处理自身与黑名单用户
-        if user_id == self.self_id or user_id in self.config.blacklist:
+        if user_id in self.config.blacklist:
             pass
         elif event.post_type == "message":
             data.past_message.append(rev)
@@ -164,7 +165,7 @@ class Concerto:
                     return self.message(event)
         elif event.post_type == "message_sent":
             if event.msg_type == "group":
-                data.past_message.append(rev)
+                self.self_message.append(rev)
             return self.message_sent(event)
         elif event.post_type == "notice":
             data.past_notice.append(rev)
@@ -257,10 +258,9 @@ class Concerto:
         """
         if self.config.is_show_all_msg:
             self.printf(
-                f"{Fore.BLUE}[SENT]{Fore.RESET}发送 -> "
+                f"{Fore.GREEN}[SENT] {Fore.RESET}"
                 f"{Fore.MAGENTA}{event.target_name}({event.target_id}){Fore.RESET} "
-                f"{Fore.MAGENTA}(msg_id:{event.msg_id}){Fore.RESET} "
-                f"{event.msg}"
+                f"{Fore.MAGENTA}(msg_id:{event.msg_id}){Fore.RESET}"
             )
         self.module_handle(event, "message_sent", auth)
 

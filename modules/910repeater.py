@@ -37,9 +37,11 @@ class Repeater(Module):
         self.printf(f"在群{Fore.MAGENTA}{self.event.group_name}({self.event.group_id}){Fore.RESET}检测到来自"
                     f"{Fore.MAGENTA}{self.event.user_name}({self.event.user_id}){Fore.RESET}的多次复读：{self.event.msg}")
         if str(self.data.past_message).count("#Already_Repeat"):
-            self.printf("该群短时间内已复读过，不再进行复读")
+            self.printf("近期该群已复读，不再进行复读")
+        elif self.event.msg in [i["message"] for i in self.robot.self_message]:
+            self.printf("近期已有相同发言，不再进行复读")
         elif self.match(r"请使用QQ最新版本"):
-            self.printf("该消息包含无法读取消息，不进行复读")
+            self.printf("该消息包含无效消息，不进行复读")
         else:
             def get_chance(repeat_count=2):
                 p0 = 0.4 # 初始概率

@@ -491,15 +491,6 @@ def quick_reply(robot: "Concerto", raw: dict, msg: str):
     """
     msg = handle_placeholder(str(msg), robot.placeholder_dict)
     if raw["post_type"] == "message":
-        robot.self_message.append(
-            {
-                "message": msg,
-                "message_id": "查阅API端",
-                "message_type": raw["message_type"],
-                "user_id": robot.self_id,
-                "time": time.time(),
-            }
-        )
         resp_dict = {"context": raw, "operation": {"reply": msg}}
         return api.handle_quick_operation(robot, resp_dict)
 
@@ -515,9 +506,6 @@ def send_msg(robot: "Concerto", msg_type: str, number: str, msg: str, group_id: 
     msg = handle_placeholder(str(msg), robot.placeholder_dict)
     resp_dict = {"msg_type": msg_type, "number": number, "msg": msg, "group_id": group_id}
     result = api.send_msg(robot, resp_dict)
-    if status_ok(result):
-        resp_dict = {"message_id": result["data"]["message_id"]}
-        robot.self_message.append(api.get_msg(robot, resp_dict)["data"])
     return result
 
 def get_msg(robot: "Concerto", msg_id: str):
@@ -571,10 +559,6 @@ def send_forward_msg(robot: "Concerto", nodes: list, group_id=None, user_id=None
     if hidden:
         data["news"] = []
     result = api.post(robot, "/send_forward_msg", data)
-    if status_ok(result):
-        robot.self_message.append(
-            get_msg(robot, result["data"]["message_id"])["data"]
-        )
     return result
 
 
@@ -588,10 +572,6 @@ def send_private_forward_msg(robot: "Concerto", node: dict, user_id: str):
     """
     data = {"user_id": user_id, "messages": node}
     result = api.post(robot, "/send_private_forward_msg", data)
-    if status_ok(result):
-        robot.self_message.append(
-            get_msg(robot, result["data"]["message_id"])["data"]
-        )
     return result
 
 def send_group_forward_msg(robot: "Concerto", node: dict, group_id: str):
@@ -604,10 +584,6 @@ def send_group_forward_msg(robot: "Concerto", node: dict, group_id: str):
     """
     data = {"group_id": group_id, "messages": node}
     result = api.post(robot, "/send_group_forward_msg", data)
-    if status_ok(result):
-        robot.self_message.append(
-            get_msg(robot, result["data"]["message_id"])["data"]
-        )
     return result
 
 def get_group_msg_history(robot: "Concerto", group_id: str):
@@ -1146,7 +1122,10 @@ class Module:
         self.data = self.robot.data.get(self.owner_id)
         if self.GLOBAL_CONFIG is None:
             return
-        self.config_file = os.path.join(self.robot.config.data_path, f"{str(self.ID).lower()}.json")
+        config_name = self.CONFIG
+        if config_name is None:
+            config_name  = f"{str(self.ID).lower()}.json"
+        self.config_file = os.path.join(self.robot.config.data_path, config_name)
         try:
             self.config = import_json(self.config_file)
         except Exception:

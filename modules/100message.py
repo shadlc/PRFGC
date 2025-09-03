@@ -33,6 +33,7 @@ class Message(Module):
             "计时 [数字] | 进行异步计时",
         ]
     }
+    CONFIG = "data.json"
     GLOBAL_CONFIG = {
         "ip_test_token": ""
     }

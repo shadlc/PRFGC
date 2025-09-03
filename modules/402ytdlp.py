@@ -174,12 +174,12 @@ class Ytdlp(Module):
             dir_path = Path(self.download_video(url, opts)).as_posix()
             file_path = dir_path
             if not os.path.exists(file_path):
-                file_path = f"{dir_path}.{ext}"
+                file_path = f"{file_path}.{ext}"
             if not os.path.exists(file_path):
                 self.reply("啊咧~视频不见啦，下载失败惹~")
                 return
             video_name = file_path.split("/").pop()
-            file_size = os.path.getsize(dir_path)
+            file_size = os.path.getsize(file_path)
             self.printf(f"视频{video_name}下载完成，大小{calc_size(file_size)}")
             if file_size > 100 * 1024 * 1024:
                 self.reply(f"视频{video_name}过大，上传失败，还是去APP观看吧~")
