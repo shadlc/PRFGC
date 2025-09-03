@@ -39,6 +39,7 @@ class Ytdlp(Module):
                 "chapter": "%(title)s - %(section_number)03d %(section_title)s [%(extractor)s %(id)s]"
             },
             "proxy": "",
+            "playlist_items": "1",
             "extractor_args": "youtubetab:skip=authcheck youtube:player-client=web",
             "merge_output_format": "mp4",
             "format": "bv*+ba/b",
@@ -150,26 +151,39 @@ class Ytdlp(Module):
                 info["url"], user_id, str(int(time.time()))
             ])
             self.save_config()
+            name = info["title"]
+            if series := info["series"]:
+                name = f"{series} {name}"
+            if uploader := info["uploader"]:
+                name = f"{uploader}上传的视频[{name}]"
+            else:
+                name = f"视频[{name}]"
             if info["duration"] > 600:
-                name = info["title"]
-                if series := info["series"]:
-                    name = f"{series} {name}"
-                if uploader := info["uploader"]:
-                    name = f"{uploader}上传的视频[{name}]"
-                else:
-                    name = f"视频[{name}]"
                 msg = f"视频大于十分钟,仅能使用最低分辨率下载，正在解析{name}，请耐心等待"
                 self.reply(msg, reply=True)
                 opts["format"] = "wv+ba/w"
             elif info["duration"] > 300:
                 opts["format"] = "bv[height<=1000]+ba/b"
-            set_emoji(self.robot, self.event.msg_id, 60)
+            if self.is_private():
+                msg = self.parse_info(info)
+                msg = f"正在解析{name}"
+                self.reply(msg, reply=True)
+            else:
+                set_emoji(self.robot, self.event.msg_id, 60)
             ext = self.config["ydl"]["merge_output_format"]
-            dir_path = Path(self.download_video(info["url"], opts)).as_posix()
+            dir_path = Path(self.download_video(url, opts)).as_posix()
             file_path = dir_path
-            if not os.path.exists(dir_path):
+            if not os.path.exists(file_path):
                 file_path = f"{dir_path}.{ext}"
+            if not os.path.exists(file_path):
+                self.reply("啊咧~视频不见啦，下载失败惹~")
+                return
             video_name = file_path.split("/").pop()
+            file_size = os.path.getsize(dir_path)
+            self.printf(f"视频{video_name}下载完成，大小{calc_size(file_size)}")
+            if file_size > 100 * 1024 * 1024:
+                self.reply(f"视频{video_name}过大，上传失败，还是去APP观看吧~")
+                return
             set_emoji(self.robot, self.event.msg_id, 66)
             if video_path := self.config["video_path"]:
                 video_path = Path(os.path.join(video_path, video_name)).as_posix()
@@ -329,9 +343,18 @@ class Ytdlp(Module):
             msg += "\n@我并回复本条消息开始下载视频"
             return msg
 
-    def download_video(self, url: str, opts: dict) -> str:
+    def download_video(self, url: str, opts: dict, max_retries=3, delay=1) -> str:
         """下载视频"""
-        with YoutubeDL(opts) as ydl:
-            info_dict = ydl.extract_info(url, download=True)
-            filename = ydl.prepare_filename(info_dict)
-            return filename
+        for attempt in range(1, max_retries + 1):
+            try:
+                with YoutubeDL(opts) as ydl:
+                    info_dict = ydl.extract_info(url, download=True)
+                    filename = ydl.prepare_filename(info_dict)
+                    return filename
+            except Exception as e:
+                self.printf(f"第 {attempt} 次下载失败: {e}")
+                if attempt == max_retries:
+                    raise
+                else:
+                    self.printf(f"{delay} 秒后重试...")
+                    time.sleep(delay)

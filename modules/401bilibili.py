@@ -68,7 +68,6 @@ class Bilibili(Module):
         if self.ID in self.robot.persist_mods:
             return
         self.robot.persist_mods[self.ID] = self
-        self.live_status = {}
         self.dynamics = {}
         self.browser = None
         self.loop = asyncio.new_event_loop()
@@ -85,7 +84,6 @@ class Bilibili(Module):
         )
         if self.ID in self.robot.persist_mods:
             bilibili: Bilibili = self.robot.persist_mods[self.ID]
-            self.live_status = bilibili.live_status
             self.dynamics = bilibili.dynamics
             self.browser = bilibili.browser
             self.loop = bilibili.loop
@@ -141,7 +139,7 @@ class Bilibili(Module):
                     self.config["env"]["ac_time_value"] = self.credential.ac_time_value
                     self.robot.persist_mods[self.ID].config = self.config.copy()
                     self.save_config()
-                await asyncio.sleep(interval * 100)
+                await asyncio.sleep(interval * 1000)
         asyncio.run_coroutine_threadsafe(credential_refresh(), self.loop)
 
     @via(lambda self: self.at_or_private() and self.au(3) and self.match(r"^关注列表$"))
@@ -184,6 +182,7 @@ class Bilibili(Module):
                     "name": name,
                     "avatar": avatar,
                     "fans": fans,
+                    "live": False,
                     "keyword": "",
                     "dynamic_notice": True,
                     "live_notice": True,
@@ -307,7 +306,11 @@ class Bilibili(Module):
                         msg += f"\n链接: https://live.bilibili.com/{room_id}"
                         if cover:
                             msg += f"\n[CQ:image,file={cover}]"
+                        self.config[self.owner_id]["sub"][uid]["live"] = True
+                        self.save_config()
                     else:
+                        self.config[self.owner_id]["sub"][uid]["live"] = False
+                        self.save_config()
                         msg = f"{name}还在休息中哦~"
                 else:
                     msg = f"{name}从来没有直播过哦~"
@@ -572,11 +575,14 @@ class Bilibili(Module):
             title = info["live_room"].get("title")
             cover = info["live_room"].get("cover")
             room_id = info["live_room"].get("roomid")
-            if self.live_status.get(uid, 0) == status:
+            live_status = self.config[self.owner_id]["sub"][uid]["live"]
+            if live_status == status:
                 await asyncio.sleep(3)
                 continue
-            self.live_status[uid] = status
+            self.config[self.owner_id]["sub"][uid]["live"] = status
+            self.save_config()
             if not status:
+                await asyncio.sleep(3)
                 continue
             notice_list = self.get_notice_list("live", uid)
             for owner_id in notice_list:
@@ -786,11 +792,14 @@ class Bilibili(Module):
             )
             if search_result and "result" in search_result:
                 for result in search_result["result"]:
+                    avatar = result["upic"]
+                    if avatar.startswith("//"):
+                        avatar = "https:" + avatar
                     return {
                         "uid": result["mid"],
                         "name": result["uname"],
                         "fans": result["fans"],
-                        "avatar": result["upic"],
+                        "avatar": avatar,
                     }
             return None
         except Exception:

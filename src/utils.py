@@ -125,9 +125,7 @@ def import_json(file: str):
 
 def save_json(file_name: str, data: str):
     """导出json"""
-    json.dump(
-        data, open(file_name, "w", encoding="utf-8"), indent=2, ensure_ascii=False
-    )
+    json.dump(data, open(file_name, "w", encoding="utf-8"), indent=2, ensure_ascii=False)
 
 def merge(d1: dict, d2: dict) -> dict:
     """简单字典合并"""
@@ -264,7 +262,7 @@ def char_true_color(char: str, rgb: list):
     r, g, b = rgb
     return f"\033[38;2;{r};{g};{b}m{char}\033[0m"
 
-def msg_img2char(config: Config, msg: str):
+def msg_img2char(config: Config, msg: str, show_url = False):
     """
     检测CQ码中有图片并转化为字符画
     :param msg: 收到的消息
@@ -284,7 +282,7 @@ def msg_img2char(config: Config, msg: str):
             target_h = int(target_w * ratio * 0.5)
             img = img.resize((target_w, target_h))
             pixels = img.getdata()
-            char = ""
+            char = "\n"
             row = 0
             for i in pixels:
                 pixel_gray = (i[0] * 38 + i[1] * 75 + i[2] * 15) >> 7
@@ -306,7 +304,9 @@ def msg_img2char(config: Config, msg: str):
                 if row >= target_w:
                     row = 0
                     char += "\n"
-            msg = msg.replace(cq, "\n" + char)
+            if show_url:
+                char = f"{url}{char}"
+            msg = msg.replace(cq, char)
         except Exception:
             if config.is_debug:
                 traceback.print_exc()
@@ -1065,6 +1065,7 @@ class Module:
     ID = None
     NAME = None
     HELP = None
+    CONFIG = None
     GLOBAL_CONFIG = None
     CONV_CONFIG = None
     AUTO_INIT = None
@@ -1128,12 +1129,21 @@ class Module:
         """判断是不是自己发送的数据"""
         return self.robot.self_id in [self.event.user_id, self.event.sender_id]
 
-    def go_on(self):
-        """未成功执行该模块"""
-        self.success = False
+    def is_private(self):
+        """是否私聊"""
+        return self.event.group_id == ""
 
     def init_config(self):
         """初始化模块数据"""
+        # 设定会话的owner_id
+        if self.event.group_id:
+            self.owner_id = f"g{self.event.group_id}"
+        elif self.event.user_id:
+            self.owner_id = f"u{self.event.user_id}"
+        else:
+            self.owner_id = f"u{self.robot.self_id}"
+        # 读取指定会话的数据与配置文件
+        self.data = self.robot.data.get(self.owner_id)
         if self.GLOBAL_CONFIG is None:
             return
         self.config_file = os.path.join(self.robot.config.data_path, f"{str(self.ID).lower()}.json")
@@ -1144,15 +1154,6 @@ class Module:
             self.errorf(f"配置文件 {self.config_file} 解析发生错误!\n{traceback.format_exc()}")
         self.GLOBAL_CONFIG = self.GLOBAL_CONFIG or {}
         self.config = merge(self.GLOBAL_CONFIG, self.config)
-        # 设定会话的owner_id
-        if self.event.group_id:
-            self.owner_id = f"g{self.event.group_id}"
-        elif self.event.user_id:
-            self.owner_id = f"u{self.event.user_id}"
-        else:
-            self.owner_id = f"u{self.robot.self_id}"
-        # 读取指定会话的数据与配置文件
-        self.data = self.robot.data.get(self.owner_id)
         if self.CONV_CONFIG is None:
             self.save_config()
             return
@@ -1175,7 +1176,8 @@ class Module:
 
     def get_data_path(self, *paths: str) -> str:
         """获取配置文件夹"""
-        path = os.path.join(self.robot.config.data_path, str(self.ID).lower(), *paths)
+        config_path = self.CONFIG if self.CONFIG else str(self.ID).lower()
+        path = os.path.join(self.robot.config.data_path, config_path, *paths)
         dir_path = path if os.path.splitext(path)[1] == "" else os.path.dirname(path)
         os.makedirs(dir_path, exist_ok=True)
         return Path(path).as_posix()

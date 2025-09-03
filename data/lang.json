@@ -2,7 +2,6 @@
     "placeholder": {
         "ROBOT_NAME": [
             "姬姬",
-            "我",
             "协奏姬"
         ],
         "WORKING": [
@@ -152,7 +151,7 @@
             "%ROBOT_NAME%重启恢复中~(◕ᴗ◕✿)",
             "Restarting~ (ﾉ◕ヮ◕)ﾉ*:･ﾟ✧",
             "%ROBOT_NAME%我先去上个厕所，马上回来 (⁄ ⁄•⁄ω⁄•⁄ ⁄)",
-            "我马上回来~ ᕕ( ᐛ )ᕗ",
+            "%ROBOT_NAME%马上回来~ ᕕ( ᐛ )ᕗ",
             "系统刷新中，Just a sec~ (•ิ_•ิ)?",
             "%ROBOT_NAME%正在加载新技能，稍等片刻 (◠‿◠✿)",
             "Refresh in progress... (ﾉ´ヮ`)ﾉ*: ･ﾟ",

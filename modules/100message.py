@@ -275,6 +275,4 @@ class Message(Module):
             self.reply("%ROBOT_NAME%正在工作呢~\nBig brother is watching you!")
         elif "你好" == self.event.msg:
             self.reply("你好！我是%ROBOT_NAME%,请@我并发送“帮助”来让我帮助您~")
-        else:
-            self.go_on()
 

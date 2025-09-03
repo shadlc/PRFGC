@@ -221,7 +221,7 @@ class Chat(Module):
             msg = "生成转发消息错误~"
             self.reply(msg)
 
-    @via(lambda self: self.at_or_private() and self.au(2) and self.match(r"^(刚刚|刚才|先前)?\S*(说|撤回)了?(什么|啥)$"))
+    @via(lambda self: self.at_or_private() and self.au(2) and self.match(r"^(刚刚|刚才|先前)?\S*(说|撤回)了?(什么|啥)"))
     def what_recall(self):
         """撤回了什么"""
         if messages := self.robot.data.get("latest_recall",{}).get(self.owner_id):

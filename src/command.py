@@ -179,7 +179,9 @@ class ExecuteCmd(object):
             msg_id = inputs[0]
             emoji_id = inputs[1] if inputs[1] else 66
             result = set_emoji(self.robot, msg_id, emoji_id)
-            if err := result.get("data").get("errMsg"):
+            if err := result.get("message", ""):
+                self.warnf(f"贴表情出错 {err}")
+            elif err := result.get("data", {}).get("errMsg"):
                 self.warnf(f"贴表情出错 {err}")
             else:
                 self.printf(
