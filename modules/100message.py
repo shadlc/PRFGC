@@ -57,7 +57,7 @@ class Message(Module):
                             help_text += "\n"
             if help_text:
                 help_text = f"{mod.NAME}帮助\n\n{help_text}"
-                help_list.append(build_node(help_text.strip()))
+                help_list.append(self.node(help_text.strip()))
         nodes = help_list
         self.reply_forward(nodes, source="ConcertBot HELP")
 

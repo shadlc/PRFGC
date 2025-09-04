@@ -1,7 +1,6 @@
 """视频下载模块"""
 
 import base64
-import logging
 import os
 from pathlib import Path
 import re
@@ -12,7 +11,7 @@ import traceback
 import urllib
 from yt_dlp import YoutubeDL, DownloadError
 
-from src.utils import Module, build_node, calc_size, calc_time, format_to_log, get_forward_msg, get_image_base64, get_msg, set_emoji, status_ok, via
+from src.utils import Module, calc_size, calc_time, format_to_log, get_forward_msg, get_image_base64, get_msg, set_emoji, status_ok, via
 
 class Ytdlp(Module):
     """视频下载模块"""
@@ -94,10 +93,10 @@ class Ytdlp(Module):
             # http://fileformats.archiveteam.org/wiki/Netscape_cookies.txt
             return self.reply("Cookie载入失败! 请联系管理员", reply=True)
         except DownloadError as e:
-            nodes = build_node(f"{format_to_log(e.msg)}")
+            nodes = self.node(f"{format_to_log(e.msg)}")
             return self.reply_forward(nodes, source="视频解析失败")
         except Exception as e:
-            nodes = build_node(f"{e}")
+            nodes = self.node(f"{e}")
             return self.reply_forward(nodes, source="视频解析失败")
 
     @via(lambda self: self.at_or_private() and self.au(2)
@@ -200,10 +199,10 @@ class Ytdlp(Module):
             # http://fileformats.archiveteam.org/wiki/Netscape_cookies.txt
             return self.reply("Cookie载入失败! 请联系管理员", reply=True)
         except DownloadError as e:
-            nodes = build_node(f"{format_to_log(e.msg)}")
+            nodes = self.node(f"{format_to_log(e.msg)}")
             return self.reply_forward(nodes, source="视频解析失败")
         except Exception:
-            nodes = build_node(f"{traceback.format_exc()}")
+            nodes = self.node(f"{traceback.format_exc()}")
             return self.reply_forward(nodes, source="视频处理失败")
         finally:
             if os.path.exists(video_path):
@@ -252,7 +251,7 @@ class Ytdlp(Module):
         if path and os.path.exists(path):
             return path
 
-    def get_info(self, url: str, opts: dict) -> dict:
+    def get_info(self, url: str, opts: dict, max_retries=3, delay=1) -> dict:
         """获取信息"""
         try:
             req = urllib.request.Request(url, headers=self.config.get("headers"))
@@ -261,9 +260,25 @@ class Ytdlp(Module):
         except Exception as e:
             if self.robot.config.is_debug:
                 self.warnf(f"获取重定向url失败! {e}")
+        info = {}
+        for attempt in range(1, max_retries + 1):
+            try:
+                with YoutubeDL(opts) as ydl:
+                    info_dict = ydl.extract_info(url, download=True)
+                    filename = ydl.prepare_filename(info_dict)
+                    return filename
+            except Exception as e:
+                self.printf(f"第 {attempt} 次解析视频失败: {e}")
+                if attempt == max_retries:
+                    raise
+                else:
+                    self.printf(f"{delay} 秒后重试...")
+                    time.sleep(delay)
         info = YoutubeDL(opts).extract_info(url, download=False, process=False)
         url = info.get("webpage_url", "")
         url = url.split("&")[0]
+        if "bilibili.com" in url:
+            url = url.split("?")[0]
         site = info.get("extractor", "")
         series = info.get("series", "")
         title = info.get("title", "[未知]")
@@ -352,7 +367,7 @@ class Ytdlp(Module):
                     filename = ydl.prepare_filename(info_dict)
                     return filename
             except Exception as e:
-                self.printf(f"第 {attempt} 次下载失败: {e}")
+                self.printf(f"第 {attempt} 次下载视频失败: {e}")
                 if attempt == max_retries:
                     raise
                 else:

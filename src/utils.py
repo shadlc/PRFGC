@@ -13,7 +13,6 @@ from pathlib import Path
 import re
 import html
 import socket
-import time
 import json
 import random
 import traceback
@@ -389,9 +388,7 @@ def build_node(*args, **kwargs):
     生成一个转发节点
     user_id,nickname,content
     """
-    content = list(args) if args else []
-    if isinstance(content, list) and len(content) == 1:
-        content = content[0]
+    content = args[0] if len(args) == 1 else list(args)
     data = {
             "type": "node",
             "data": {
@@ -1160,6 +1157,16 @@ class Module:
         dir_path = path if os.path.splitext(path)[1] == "" else os.path.dirname(path)
         os.makedirs(dir_path, exist_ok=True)
         return Path(path).as_posix()
+
+    def node(self, *args, **kwargs):
+        """
+        生成一个转发节点
+        user_id,nickname,content
+        """
+        if len(args) == 1 and isinstance(args[0], str):
+            content = handle_placeholder(args[0], self.robot.placeholder_dict)
+            return build_node(content, **kwargs)
+        return build_node(*args, **kwargs)
 
     def reply(self, msg, reply=False, force=False):
         """快捷回复消息"""

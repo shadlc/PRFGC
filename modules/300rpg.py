@@ -288,7 +288,7 @@ class RPG(Module):
                     help_text += f"{text}\n"
                     if i == 0:
                         help_text += "\n"
-        nodes = [build_node(help_text)]
+        nodes = [self.node(help_text)]
         self.reply_forward(nodes, source="跑团功能帮助")
 
     @via(lambda self: self.au(2) and self.match(r"^\.r[0-9dD\+\-\s]*$"))

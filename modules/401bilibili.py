@@ -16,7 +16,7 @@ try:
 except ImportError:
     HAS_PLAYWRIGHT = False
 
-from src.utils import MiniCron, Module, build_node, send_forward_msg, send_msg, set_emoji, via
+from src.utils import MiniCron, Module, send_forward_msg, send_msg, set_emoji, via
 
 class Bilibili(Module):
     """哔哩哔哩模块"""
@@ -162,7 +162,7 @@ class Bilibili(Module):
                     info["name"] = user_info["name"]
                     info["fans"] = user_info["fans"]
                     info["avatar"] = user_info["avatar"]
-                nodes.append(build_node(self.parse_user_info(uid, info)))
+                nodes.append(self.node(self.parse_user_info(uid, info)))
         else:
             msg = "这里还未拥有关注列表，请管理员添加吧~"
             self.reply(msg)
@@ -258,19 +258,19 @@ class Bilibili(Module):
                             return
                     title = f"[哔哩哔哩] {dyn["author"]}{self.type_msg.get(d_type, "发布了新动态")}"
                     nodes = []
-                    nodes.append(build_node(dyn["url"]))
+                    nodes.append(self.node(dyn["url"]))
                     msg = dyn["content"]
                     for img in dyn["imgs"]:
                         msg += f"[CQ:image,file={img}]"
-                    nodes.append(build_node(msg))
+                    nodes.append(self.node(msg))
                     if ori := dyn["origin"]:
-                        nodes.append(build_node("====================\n以下是转发的动态内容:"))
-                        nodes.append(build_node(ori["url"]))
+                        nodes.append(self.node("====================\n以下是转发的动态内容:"))
+                        nodes.append(self.node(ori["url"]))
                         msg = f"{ori["author"]}:\n"
                         msg += ori["content"]
                         for img in ori["imgs"]:
                             msg += f"[CQ:image,file={img}]"
-                        nodes.append(build_node(msg))
+                        nodes.append(self.node(msg))
                     self.reply_forward(nodes, title)
                     return
                 else:
@@ -539,19 +539,19 @@ class Bilibili(Module):
                         continue
                 title = f"[哔哩哔哩] {dyn["author"]}{self.type_msg.get(d_type, "发布了新动态")}"
                 nodes = []
-                nodes.append(build_node(dyn["url"]))
+                nodes.append(self.node(dyn["url"]))
                 msg = dyn["content"]
                 for img in dyn["imgs"]:
                     msg += f"[CQ:image,file={img}]"
-                nodes.append(build_node(msg))
+                nodes.append(self.node(msg))
                 if ori := dyn["origin"]:
-                    nodes.append(build_node("====================\n以下是转发的动态内容:"))
-                    nodes.append(build_node(ori["url"]))
+                    nodes.append(self.node("====================\n以下是转发的动态内容:"))
+                    nodes.append(self.node(ori["url"]))
                     ori_msg = f"{ori["author"]}:\n"
                     ori_msg += ori["content"]
                     for img in ori["imgs"]:
                         ori_msg += f"[CQ:image,file={img}]"
-                    nodes.append(build_node(ori_msg))
+                    nodes.append(self.node(ori_msg))
                 for owner_id in notice_list:
                     pattern = self.config[owner_id]["sub"][uid].get("keyword")
                     if pattern == "" or re.search(pattern, msg):

@@ -17,7 +17,6 @@ from wordcloud import WordCloud
 
 from src.utils import (
     Module,
-    build_node,
     get_error,
     get_stranger_info,
     get_user_name,
@@ -69,7 +68,7 @@ class Chat(Module):
     @via(lambda self: self.at_or_private() and self.au(2) and self.match(r"词云"), success=False)
     def wordcloud(self):
         """词云"""
-        date_pattern = "今天|今日|本日|这天|昨天|昨日|前天|前日|本周|这周|此周|这个?礼拜|这个?星期|上周|上个?礼拜|上个?星期|本月|这月|次月|这个月|上个?月|今年|本年|此年|这一?年|去年|上一?年"
+        date_pattern = "历史|全部|今天|今日|本日|这天|昨天|昨日|前天|前日|本周|这周|此周|这个?礼拜|这个?星期|上周|上个?礼拜|上个?星期|本月|这月|次月|这个月|上个?月|今年|本年|此年|这一?年|去年|上一?年"
         if self.match(r"(开启|启用|打开|记录|启动|关闭|禁用|取消)"):
             if self.auth <= 1:
                 self.wordcloud_switch()
@@ -156,9 +155,10 @@ class Chat(Module):
         self.success = True
         self.reply(msg, reply=True)
 
-    @via(lambda self: self.at_or_private() and self.au(2) and self.match(r"^(开启|启用|打开|记录|启动|关闭|禁用|取消)?复读(统计|记录|排行)$"))
+    @via(lambda self: self.at_or_private() and self.au(2) and self.match(r"复读(统计|记录|排行榜?)"), success=False)
     def repeat(self):
         """复读"""
+        date_pattern = "历史|全部|今天|今日|本日|这天|昨天|昨日|前天|前日|本周|这周|此周|这个?礼拜|这个?星期|上周|上个?礼拜|上个?星期|本月|这月|次月|这个月|上个?月|今年|本年|此年|这一?年|去年|上一?年"
         if self.match(r"(开启|启用|打开|记录|启动)"):
             self.config[self.owner_id]["repeat_record"]["enable"] = True
             msg = "复读统计已开启"
@@ -167,7 +167,7 @@ class Chat(Module):
             self.config[self.owner_id]["repeat_record"]["enable"] = False
             msg = "复读统计已关闭"
             self.save_config()
-        else:
+        elif match := self.match(rf"(生成)?({date_pattern})?的?复读(统计|记录|排行榜?)"):
             if self.config[self.owner_id]["repeat_record"]["enable"]:
                 if self.match(r"(今天|今日)"):
                     gen_type = "today"
@@ -189,13 +189,18 @@ class Chat(Module):
                     gen_type = "last_year"
                 else:
                     gen_type = "all"
-                data = self.get_repeat_record(gen_type)
+                data = self.get_repeat_record(gen_type, self.owner_id)
                 if not data or data == [[]]:
                     msg = "没有复读记录哦~"
                 else:
                     msg = self.format_repeat_record(data, gen_type)
+                    gen_type = match.groups()[1] or "历史"
+                    self.reply_forward(self.node(msg), source=f"{gen_type}复读排行")
+                    return
             else:
                 msg = "请先开启复读记录哦~"
+        else:
+            return
         self.reply(msg, reply=True)
 
     @via(lambda self: self.at_or_private() and self.au(2) and self.match(r"^\s*(\s?(\S+)(说|言)(道|过)?(:|：)(\S+)\s?)+\s*$"))
@@ -214,7 +219,7 @@ class Chat(Module):
             if re.search(r"^(我|吾|俺|朕|孤)$", name):
                 name = self.event.user_name
                 uid = self.event.user_id
-            msg_list.append(build_node(content, user_id=uid, nickname=name))
+            msg_list.append(self.node(content, user_id=uid, nickname=name))
         if msg_list:
             self.reply_forward(msg_list, hidden=False)
         else:
@@ -230,7 +235,7 @@ class Chat(Module):
                 user_id = msg.get("user_id")
                 nickname = msg.get("sender",{}).get("nickname","")
                 content = msg.get("raw_message","")
-                nodes.append(build_node(content, user_id=user_id, nickname=nickname))
+                nodes.append(self.node(content, user_id=user_id, nickname=nickname))
             self.reply_forward(nodes, "撤回消息列表", hidden=False)
         else:
             self.reply("什么也没有哦~")
@@ -435,7 +440,7 @@ class Chat(Module):
             self.errorf(traceback.format_exc())
             return ""
 
-    def get_date_range(self, type_name: str):
+    def get_date_range(self, type_name: str | None):
         """获取指定区间的日期"""
         today = datetime.date.today()
         if type_name == "all":
@@ -614,8 +619,9 @@ class Chat(Module):
             CREATE TABLE IF NOT EXISTS repeat (                   -- 复读表
                 owner_id TEXT,                      -- 所属ID
                 user_id INTEGER,                    -- 用户ID
+                date TEXT NOT NULL,                 -- YYYYMMDD
                 text TEXT,                          -- 复读内容
-                update_ts INTEGER                   -- 时间戳
+                update_ts TEXT                      -- 时间戳
             );
         """)
         conn.commit()
@@ -627,15 +633,17 @@ class Chat(Module):
                 return
             if ts is None:
                 ts = datetime.datetime.now()
+            date = ts.strftime("%Y%m%d")
             db_path = self.get_data_path(self.config["database"])
             conn = sqlite3.connect(db_path)
             self.init_repeat_db(conn)
             cursor = conn.cursor()
             cursor.execute(
-                "INSERT INTO repeat VALUES (?, ?, ?, ?);",
+                "INSERT INTO repeat VALUES (?, ?, ?, ?, ?);",
                 (
                     owner_id,
                     user_id,
+                    date,
                     text,
                     ts.isoformat(),
                 )
@@ -645,24 +653,28 @@ class Chat(Module):
         except Exception:
             self.errorf("保存复读记录失败:\n" + traceback.format_exc())
 
-    def get_repeat_record(self, gen_type="all"):
+    def get_repeat_record(self, gen_type: str, owner_id: str):
         """获取复读记录"""
         db_path = self.get_data_path(self.config["database"])
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
 
-        sql = "SELECT * FROM repeat WHERE OWNER_ID = ?"
-        params = [self.owner_id]
+        query = "SELECT * FROM repeat"
+        params = [owner_id]
+        conditions = ["OWNER_ID=?"]
 
-        start_time, end_time = self.get_date_range(gen_type)
-        if start_time and end_time:
-            sql += " AND TIMESTAMP >= ? AND TIMESTAMP < ?"
-            params.extend([start_time.isoformat(), end_time.isoformat()])
-        elif start_time:
-            sql += " AND TIMESTAMP >= ?"
-            params.append(start_time.isoformat())
+        date_range = self.get_date_range(gen_type)
+        if date_range != (None, None):
+            start_date = date_range[0].strftime("%Y%m%d")
+            end_date = date_range[1].strftime("%Y%m%d")
+            conditions.append("date>=?")
+            conditions.append("date<=?")
+            params.extend([start_date, end_date])
 
-        cursor.execute(sql, params)
+        where_clause = " WHERE " + " AND ".join(conditions)
+        query = f"{query}{where_clause} ORDER BY date ASC"
+
+        cursor.execute(query, params)
         rows = cursor.fetchall()
         conn.close()
         return rows
@@ -687,10 +699,10 @@ class Chat(Module):
         msg += f"\n{type_text}共复读{total_repeat_times}次"
         text_count_dict = {}
         for item in data:
-            if item[2] in text_count_dict:
-                text_count_dict[item[2]] += 1
+            if item[3] in text_count_dict:
+                text_count_dict[item[3]] += 1
             else:
-                text_count_dict[item[2]] = 1
+                text_count_dict[item[3]] = 1
         text_sorted = sorted(text_count_dict.items(), key=lambda x: x[1], reverse=True)
         msg += f"\n\n其中，被复读最多次的是“{text_sorted[0][0]}”，共被复读了{text_sorted[0][1]}次"
         user_count_dict = {}
@@ -704,20 +716,20 @@ class Chat(Module):
         for item in data:
             if user_sorted[0][0] != item[1]:
                 continue
-            if item[2] in mvp_dict:
-                mvp_dict[item[2]] += 1
+            if item[3] in mvp_dict:
+                mvp_dict[item[3]] += 1
             else:
-                mvp_dict[item[2]] = 1
+                mvp_dict[item[3]] = 1
         mvp_dict = sorted(mvp_dict.items(), key=lambda x: x[1], reverse=True)
         if not self.event.group_id:
             return msg
         msg += f"\n\n[CQ:at,qq={user_sorted[0][0]}]复读的最勤快了，把“{mvp_dict[0][0]}”复读了{mvp_dict[0][1]}次"
-        if total_repeat_times >= 20 and total_repeat_times < 50:
+        if total_repeat_times >= 20 and total_repeat_times < 50 and len(text_sorted) >= 3:
             msg += "\n\n此外，这是复读次数排行榜:"
             msg += f"\n第一名: {text_sorted[0][0]}, 计数{text_sorted[0][1]}次"
             msg += f"\n第二名: {text_sorted[1][0]}, 计数{text_sorted[1][1]}次"
             msg += f"\n第三名: {text_sorted[2][0]}, 计数{text_sorted[2][1]}次"
-        elif total_repeat_times >= 50:
+        elif total_repeat_times >= 50 and len(text_sorted) >= 5:
             msg += "\n\n此外，这是复读次数排行榜:"
             msg += f"\n第一名: {text_sorted[0][0]}, 计数{text_sorted[0][1]}次"
             msg += f"\n第二名: {text_sorted[1][0]}, 计数{text_sorted[1][1]}次"
