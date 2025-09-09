@@ -919,7 +919,7 @@ class Bilibili(Module):
             opus = module_dynamic.get("major", {}).get("opus", {})
             url = opus.get("jump_url", "")
             content = opus.get("title", "")
-            content += "\n" + archive.get("jump_url", "") + "\n"
+            content += "\n" + opus.get("jump_url", "") + "\n"
             content = opus.get("summary", {}).get("text", "")
             if pics := opus.get("pics"):
                 for pic in pics:
@@ -927,7 +927,7 @@ class Bilibili(Module):
         elif "DYNAMIC_TYPE_MUSIC" == dynamic_type:
             music = module_dynamic.get("major", {}).get("music", {})
             content = module_dynamic.get("desc", {}).get("text", {})
-            content += "\n" + archive.get("jump_url", "") + "\n"
+            content += "\n" + music.get("jump_url", "") + "\n"
             content = music.get("title", "")
             if cover := music.get("cover"):
                 imgs.append(cover)

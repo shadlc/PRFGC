@@ -111,8 +111,8 @@ class Waifu(Module):
     def add_waifu(self):
         """添加二次元老婆"""
         try:
-            waifu_name = re.sub(r"(添加?老婆)|\[.*\]", "", self.event.msg).strip()
-            ret = self.match(r"\[CQ:image,file=(.*)?,url=(.*)\]")
+            waifu_name = re.sub(r"(添加?老婆|\[.*?\])", "", self.event.msg).strip()
+            ret = self.match(r"\[CQ:image,file=(.*)?,url=(.*),.*\]")
             if not ret:
                 return self.reply("请注明二次元老婆名称~")
             elif not ret:
@@ -159,5 +159,5 @@ class Waifu(Module):
         fmt = imghdr.what(None, h=data.content)
         file_path = os.path.join(pic_path, f"{name}.{fmt}")
         with open(file_path, "wb") as f:
-            f.write(data)
+            f.write(data.content)
                     

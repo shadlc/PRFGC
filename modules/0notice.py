@@ -100,7 +100,7 @@ class Notice(Module):
             self.event.user_id == self.robot.self_id
             and self.event.operator_id != self.robot.self_id
             and self.event.operator_id not in self.robot.config.admin_list
-            and random.choice(1)
+            and random.randint(0, 2) == 0
         ):
             msg = f"{self.event.operator_name}在{recall_time}将%ROBOT_NAME%的消息撤回，%ROBOT_NAME%很难过"
             reply_event(self.robot, self.event, msg)

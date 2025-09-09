@@ -84,10 +84,7 @@ class Ytdlp(Module):
             set_emoji(self.robot, self.event.msg_id, 124)
             info = self.get_info(url, opts)
             msg = self.parse_info(info)
-            if info.get("type") == "playlist":
-                msg = f"解析成功，但不支持下载视频合辑，请使用单集链接!\n{msg}"
-            else:
-                msg = f"视频解析成功!\n{msg}"
+            msg = f"视频解析成功!\n{msg}"
             self.reply(msg, reply=True)
         except LoadError:
             # http://fileformats.archiveteam.org/wiki/Netscape_cookies.txt
@@ -102,10 +99,10 @@ class Ytdlp(Module):
     @via(lambda self: self.at_or_private() and self.au(2)
             and self.config[self.owner_id]["enable"]
             and (self.match(r"\[CQ:reply,id=([^\]]+?)\]")
-            or self.match(self.video_pattern)), success=False)
+            or self.match(rf"(【.*】\s)?{self.video_pattern}")), success=False)
     def download(self):
         """下载视频"""
-        url_match = self.match(rf"^({self.video_pattern})$")
+        url_match = self.match(rf"({self.video_pattern})")
         reply_match = self.match(r"\[CQ:reply,id=([^\]]+?)\]")
         url = ""
         if reply_match:
@@ -130,7 +127,9 @@ class Ytdlp(Module):
         try:
             set_emoji(self.robot, self.event.msg_id, 124)
             info = self.get_info(url, opts)
-            if info.get("type") == "playlist":
+            if info.get("type") == "playlist" and ("bilibili.com" in url or "b23.tv" in url):
+                url = info["url"] + "?p=1"
+            elif info.get("type") == "playlist":
                 msg = self.parse_info(info)
                 msg = f"解析成功，但不支持下载视频合辑，请使用单集链接!\n{msg}"
                 self.reply(msg)
@@ -264,17 +263,14 @@ class Ytdlp(Module):
         for attempt in range(1, max_retries + 1):
             try:
                 with YoutubeDL(opts) as ydl:
-                    info_dict = ydl.extract_info(url, download=True)
-                    filename = ydl.prepare_filename(info_dict)
-                    return filename
+                    info = ydl.extract_info(url, download=False, process=False)
             except Exception as e:
                 self.printf(f"第 {attempt} 次解析视频失败: {e}")
                 if attempt == max_retries:
-                    raise
+                    return info
                 else:
                     self.printf(f"{delay} 秒后重试...")
                     time.sleep(delay)
-        info = YoutubeDL(opts).extract_info(url, download=False, process=False)
         url = info.get("webpage_url", "")
         url = url.split("&")[0]
         if "bilibili.com" in url:
@@ -335,30 +331,31 @@ class Ytdlp(Module):
         if view_count:
             view_count = f"{round(view_count/10000,2)}万" if view_count >= 10000 else view_count
         if video_type == "playlist":
-            msg = f"链接: {url}\n"
-            msg += f"平台: {site}\n"
-            msg += f"标题: {title}\n"
-            msg += f"简介: {description}"
+            msg = f"链接: {url}"
+            msg += f"\n平台: {site}"
+            msg += f"\n标题: {title}"
+            if description:
+                msg += f"\n简介: {description}"
             return msg
         else:
-            msg = f"链接: {url}\n"
-            msg += f"平台: {site}\n"
+            msg = f"链接: {url}"
+            msg += f"\n平台: {site}"
             if series:
-                msg += f"标题: {series} {title}\n"
+                msg += f"\n标题: {series} {title}"
             else:
-                msg += f"标题: {title}\n"
-            msg += f"作者: {uploader or "[未知]"}\n"
-            msg += f"时长: {calc_time(int(duration)) or "[未知]"}\n"
-            msg += f"播放量: {view_count}\n"
+                msg += f"\n标题: {title}"
+            msg += f"\n作者: {uploader or "[未知]"}"
+            msg += f"\n时长: {calc_time(int(duration)) or "[未知]"}"
+            msg += f"\n播放量: {view_count}"
             if img:
-                msg += f"[CQ:image,file=base64://{img},subtype=0]"
+                msg += f"\n[CQ:image,file=base64://{img},subtype=0]"
             if size:
                 msg += "\n获取到的最佳格式为: "
                 msg += f"{resolution} {ext} {calc_size(int(size))}"
             msg += "\n@我并回复本条消息开始下载视频"
             return msg
 
-    def download_video(self, url: str, opts: dict, max_retries=3, delay=1) -> str:
+    def download_video(self, url: str, opts: dict, max_retries=5, delay=1) -> str:
         """下载视频"""
         for attempt in range(1, max_retries + 1):
             try:

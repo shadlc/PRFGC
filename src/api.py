@@ -77,6 +77,15 @@ def get_msg(robot: "Concerto", resp: dict):
 def get_forward_msg(robot: "Concerto", resp: dict):
     return post(robot, "/get_forward_msg", resp)
 
+def send_forward_msg(robot: "Concerto", resp: dict):
+    return post(robot, "/send_forward_msg", resp)
+
+def send_private_forward_msg(robot: "Concerto", resp: dict):
+    return post(robot, "/send_private_forward_msg", resp)
+
+def send_group_forward_msg(robot: "Concerto", resp: dict):
+    return post(robot, "/send_group_forward_msg", resp)
+
 def send_group_notice(robot: "Concerto", resp: dict):
     group_id = resp["group_id"]  # 群号
     content = resp["content"]  # 公告内容

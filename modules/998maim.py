@@ -494,7 +494,7 @@ class Maim(Module):
             return send_status
         except Exception:
             self.errorf(f"请检查与MaiMBot之间的连接, 发送消息失败: {traceback.format_exc()}")
-            self.error_times += 1
+            self.robot.persist_mods[self.ID].error_times += 1
 
     async def construct_message(self) -> MessageBase:
         """根据平台事件构造标准 MessageBase"""
@@ -589,9 +589,9 @@ class Maim(Module):
         async def send_msg_task():
             if self.error_times > 3:
                 self.warnf("检测到连接异常次数大于三次，自动重启路由")
-                await self.router.stop()
-                await self.router.run()
                 self.robot.persist_mods[self.ID].error_times = 0
+                await self.router.stop()
+                self.router_run()
             msg = await self.construct_message()
             await self.send_to_maim(msg)
         self.loop.call_soon_threadsafe(

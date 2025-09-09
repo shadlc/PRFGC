@@ -124,7 +124,8 @@ def import_json(file: str):
 
 def save_json(file_name: str, data: str):
     """导出json"""
-    json.dump(data, open(file_name, "w", encoding="utf-8"), indent=2, ensure_ascii=False)
+    with open(file_name, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2, ensure_ascii=False)
 
 def merge(d1: dict, d2: dict) -> dict:
     """简单字典合并"""
@@ -427,17 +428,13 @@ def reply_event(robot: "Concerto", event: "Event", msg: str, reply=False, force=
         if event.msg_type == "group":
             group_id = event.group_id
             group_name = get_group_name(robot, group_id)
-            robot.printf(
-                f"{Fore.GREEN}[SEND] {Fore.RESET}向群{Fore.MAGENTA}{group_name}({group_id}){Fore.RESET}发送消息：{simple_msg}"
-            )
+            robot.printf(f"{Fore.GREEN}[SEND] {Fore.RESET}向群{Fore.MAGENTA}{group_name}({group_id}){Fore.RESET}发送消息：{simple_msg}")
             resp_dict = {"msg_type": "group", "number": group_id, "msg": msg}
             return api.send_msg(robot, resp_dict)
         else:
             user_id = event.user_id
             user_name = get_user_name(robot, user_id)
-            robot.printf(
-                f"{Fore.GREEN}[SEND] {Fore.RESET}向{Fore.MAGENTA}{user_name}({user_id}){Fore.RESET}发送消息：{simple_msg}"
-            )
+            robot.printf(f"{Fore.GREEN}[SEND] {Fore.RESET}向{Fore.MAGENTA}{user_name}({user_id}){Fore.RESET}发送消息：{simple_msg}")
             resp_dict = {"msg_type": "private", "number": user_id, "msg": msg}
             return api.send_msg(robot, resp_dict)
 
@@ -454,15 +451,11 @@ def reply_id(robot: "Concerto", msg_type: str, uid: str, msg: str, force=False):
     simple_msg = re.sub(r"\[CQ:(.*?),file=base64.*\]", r"[CQ:\1,file=Base64]", msg)
     if not robot.config.is_silence or force:
         if msg_type == "group":
-            robot.printf(
-                f"{Fore.GREEN}[SEND] {Fore.RESET}向群{Fore.MAGENTA}{get_group_name(robot, uid)}({uid}){Fore.RESET}发送消息：{simple_msg}"
-            )
+            robot.printf(f"{Fore.GREEN}[SEND] {Fore.RESET}向群{Fore.MAGENTA}{get_group_name(robot, uid)}({uid}){Fore.RESET}发送消息：{simple_msg}")
             resp_dict = {"msg_type": "group", "number": uid, "msg": msg}
             return api.send_msg(robot, resp_dict)
         else:
-            robot.printf(
-                f"{Fore.GREEN}[SEND] {Fore.RESET}向{Fore.MAGENTA}{get_user_name(robot, uid)}({uid}){Fore.RESET}发送消息：{simple_msg}"
-            )
+            robot.printf(f"{Fore.GREEN}[SEND] {Fore.RESET}向{Fore.MAGENTA}{get_user_name(robot, uid)}({uid}){Fore.RESET}发送消息：{simple_msg}")
             resp_dict = {"msg_type": "private", "number": uid, "msg": msg}
             return api.send_msg(robot, resp_dict)
 
@@ -546,17 +539,18 @@ def send_forward_msg(robot: "Concerto", nodes: list, group_id=None, user_id=None
     :param source: 来源字段
     :return: 发送消息后返回的json信息
     """
-    data = {"messages": nodes, "source": source}
+    resp_dict = {"messages": nodes, "source": source}
     if group_id:
-        data["group_id"] = group_id
+        robot.printf(f"{Fore.GREEN}[SEND] {Fore.RESET}向群{Fore.MAGENTA}{get_group_name(robot, group_id)}({group_id}){Fore.RESET}发送消息：{nodes}")
+        resp_dict["group_id"] = group_id
     elif user_id:
-        data["user_id"] = user_id
+        robot.printf(f"{Fore.GREEN}[SEND] {Fore.RESET}向{Fore.MAGENTA}{get_user_name(robot, user_id)}({user_id}){Fore.RESET}发送消息：{nodes}")
+        resp_dict["user_id"] = user_id
     else:
         return
     if hidden:
-        data["news"] = []
-    result = api.post(robot, "/send_forward_msg", data)
-    return result
+        resp_dict["news"] = []
+    return api.send_forward_msg(robot, resp_dict)
 
 
 def send_private_forward_msg(robot: "Concerto", node: dict, user_id: str):
@@ -567,9 +561,8 @@ def send_private_forward_msg(robot: "Concerto", node: dict, user_id: str):
     :param user_id: 发送到的用户ID
     :return: 发送消息后返回的json信息
     """
-    data = {"user_id": user_id, "messages": node}
-    result = api.post(robot, "/send_private_forward_msg", data)
-    return result
+    resp_dict = {"user_id": user_id, "messages": node}
+    return api.send_private_forward_msg(robot, resp_dict)
 
 def send_group_forward_msg(robot: "Concerto", node: dict, group_id: str):
     """
@@ -579,9 +572,8 @@ def send_group_forward_msg(robot: "Concerto", node: dict, group_id: str):
     :param node: 转发消息内容物
     :return: 发送消息后返回的json信息
     """
-    data = {"group_id": group_id, "messages": node}
-    result = api.post(robot, "/send_group_forward_msg", data)
-    return result
+    resp_dict = {"group_id": group_id, "messages": node}
+    return api.send_group_forward_msg(robot, resp_dict)
 
 def get_group_msg_history(robot: "Concerto", group_id: str):
     """
@@ -1145,6 +1137,8 @@ class Module:
             self.config[owner_id] = config_content
         elif config_content:
             self.config = config_content
+        if self.config == import_json(self.config_file):
+            return
         try:
             save_json(self.config_file, self.config)
         except Exception:
