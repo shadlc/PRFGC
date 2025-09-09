@@ -717,7 +717,7 @@ class Bilibili(Module):
         dynamics = await self.get_user_dynamics(uid)
         if not dynamics:
             return result
-        for i, dynamic in enumerate(dynamics):
+        for i, dynamic in enumerate(dynamics, reversed=True):
             dynamic_id = dynamic["id_str"]
             if dynamic_id in [d["id_str"] for d in self.dynamics.get(uid, {})]:
                 continue
