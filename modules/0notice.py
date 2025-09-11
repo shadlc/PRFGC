@@ -38,7 +38,7 @@ class Notice(Module):
                 poke(self.robot, self.event.user_id, self.event.group_id)
                 if self.event.target_id == self.robot.self_id:
                     reply_id(self.robot, "group", self.event.group_id, "%BE_POKED%")
-        else:
+        elif not self.event.group_id:
             self.printf(
                 f"接收来自"
                 f"{Fore.MAGENTA}{self.event.user_name}({self.event.user_id}){Fore.RESET}的戳一戳"
@@ -110,7 +110,7 @@ class Notice(Module):
                     if not self.robot.data.get("latest_recall"):
                         self.robot.data["latest_recall"] = {}
                     if not self.robot.data.get("latest_recall", {}).get(self.owner_id):
-                        self.robot.data["latest_recall"][self.owner_id] = deque(maxlen=10)
+                        self.robot.data["latest_recall"][self.owner_id] = deque(maxlen=20)
                     self.robot.data["latest_recall"][self.owner_id].append(message)
 
     @via(lambda self: self.event.notice_type == "group_upload")

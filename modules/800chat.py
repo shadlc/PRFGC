@@ -6,6 +6,7 @@ import io
 import os
 import re
 import sqlite3
+import time
 import traceback
 
 import jieba
@@ -232,9 +233,12 @@ class Chat(Module):
         if messages := self.robot.data.get("latest_recall",{}).get(self.owner_id):
             nodes = []
             for msg in messages:
+                if msg.get("time") and time.time() - msg.get("time") > 24 * 3600:
+                    continue
                 user_id = msg.get("user_id")
                 nickname = msg.get("sender",{}).get("nickname","")
                 content = msg.get("raw_message","")
+                content = re.sub(r",sub_type=\d", "", content)
                 nodes.append(self.node(content, user_id=user_id, nickname=nickname))
             self.reply_forward(nodes, "撤回消息列表", hidden=False)
         else:

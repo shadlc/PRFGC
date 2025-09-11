@@ -98,7 +98,7 @@ class Bilibili(Module):
         self.init_task()
         self.loop.run_forever()
 
-    def init_task(self, interval=30):
+    def init_task(self, interval=20):
         """初始化任务"""
         time.sleep(10)
         dynamic = len(self.get_uid_list("dynamic"))
@@ -717,7 +717,7 @@ class Bilibili(Module):
         dynamics = await self.get_user_dynamics(uid)
         if not dynamics:
             return result
-        for i, dynamic in enumerate(dynamics, reversed=True):
+        for i, dynamic in enumerate(reversed(dynamics)):
             dynamic_id = dynamic["id_str"]
             if dynamic_id in [d["id_str"] for d in self.dynamics.get(uid, {})]:
                 continue

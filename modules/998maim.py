@@ -57,6 +57,7 @@ class Maim(Module):
         ],
         1: [
             "[开启|关闭]麦麦 | 开启或关闭麦麦机器人功能",
+            "重新连接麦麦 | 重置麦麦机器人的连接",
         ],
     }
     GLOBAL_CONFIG = {
@@ -80,12 +81,13 @@ class Maim(Module):
         logger = logging.getLogger("maim_message")
         apply_formatter(logger, self.ID)
         self.loop = asyncio.get_event_loop()
+        threading.Thread(target=self.loop.run_forever, daemon=True).start()
         self.error_times = 0
         target_config = TargetConfig(url=self.config["url"], token=None)
         route_config = RouteConfig({self.config["platform"]: target_config})
         self.router = Router(route_config)
         self.router.register_class_handler(self.handle_maimbot_message)
-        self.router_run()
+        self.listening()
 
     def premise(self):
         if self.ID in self.robot.persist_mods:
@@ -95,18 +97,9 @@ class Maim(Module):
             self.error_times = maim.error_times
         return self.config["url"]
 
-    def router_run(self, router=None):
-        """启动"""
-        if router is None:
-            router = self.router
-        threading.Thread(target=self.listening, args=(router,), daemon=True, name=self.NAME).start()
-
-    def listening(self, router=None):
+    def listening(self):
         """开启监听"""
-        if router is None:
-            router = self.router
-        while True:
-            self.loop.run_until_complete(router.run())
+        asyncio.run_coroutine_threadsafe(self.router.run(), self.loop)
 
     async def handle_maimbot_message(self, raw_message: dict):
         """处理 MaiMBot 回复的消息"""
@@ -491,10 +484,27 @@ class Maim(Module):
             send_status = await self.router.send_message(msg)
             if not send_status:
                 raise RuntimeError("路由未正确配置或连接异常")
+            self.robot.persist_mods[self.ID].error_times = 0
             return send_status
-        except Exception:
-            self.errorf(f"请检查与MaiMBot之间的连接, 发送消息失败: {traceback.format_exc()}")
+        except Exception as e:
             self.robot.persist_mods[self.ID].error_times += 1
+            self.error_times = self.robot.persist_mods[self.ID].error_times
+            if self.error_times == 3:
+                self.errorf(f"请检查与MaiMBot之间的连接, 发送消息失败: {traceback.format_exc()}")
+                raise RuntimeError("麦麦机器人连接异常!") from e
+            if self.error_times > 3:
+                self.errorf("发送消息至MaiMBot失败")
+            if 1 <= self.error_times and self.error_times <= 3:
+                self.warnf("检测到连接异常，自动重启路由")
+                try:
+                    await self.router.clients[self.config["platform"]].stop()
+                except Exception:
+                    self.errorf(traceback.format_exc())
+                try:
+                    await self.router.stop()
+                except Exception:
+                    self.errorf(traceback.format_exc())
+                self.listening()
 
     async def construct_message(self) -> MessageBase:
         """根据平台事件构造标准 MessageBase"""
@@ -580,6 +590,24 @@ class Maim(Module):
             self.save_config()
         self.reply(msg)
 
+    @via(
+        lambda self: self.at_or_private() and self.au(1)
+        and self.match(r"^重新连接麦麦$")
+    )
+    async def restart_maimbot(self):
+        """重新连接麦麦"""
+        try:
+            asyncio.run_coroutine_threadsafe(
+                self.router.clients[self.config["platform"]].stop(), self.loop
+            ).result()
+        except Exception:
+            self.errorf(traceback.format_exc())
+        try:
+            asyncio.run_coroutine_threadsafe(self.router.stop(), self.loop).result()
+        except Exception:
+            self.errorf(traceback.format_exc())
+        self.listening()
+
     @via(lambda self: self.ID in self.robot.persist_mods
          and self.config[self.owner_id]["enable"]
          and self.event.user_id not in self.config[self.owner_id].get("blacklist")
@@ -587,11 +615,6 @@ class Maim(Module):
     def send_maimbot(self):
         """发送至麦麦"""
         async def send_msg_task():
-            if self.error_times > 3:
-                self.warnf("检测到连接异常次数大于三次，自动重启路由")
-                self.robot.persist_mods[self.ID].error_times = 0
-                await self.router.stop()
-                self.router_run()
             msg = await self.construct_message()
             await self.send_to_maim(msg)
         self.loop.call_soon_threadsafe(
@@ -777,10 +800,20 @@ qq_face: dict = {
     "355": "[表情：耶]",
     "356": "[表情：666]",
     "357": "[表情：裂开]",
+    "360": "[表情：亲亲]",
+    "361": "[表情：狗狗笑哭]",
+    "362": "[表情：好兄弟]",
+    "363": "[表情：狗狗可怜]",
+    "364": "[表情：超级赞]",
+    "365": "[表情：狗狗生气]",
+    "366": "[表情：芒狗]",
+    "367": "[表情：狗狗疑问]",
     "392": "[表情：龙年 快乐]",
     "393": "[表情：新年中龙]",
     "394": "[表情：新年大龙]",
     "395": "[表情：略略略]",
+    "396": "[表情：狼狗]",
+    "397": "[表情：抛媚眼]",
     "😊": "[表情：嘿嘿]",
     "😌": "[表情：羞涩]",
     "😚": "[ 表情：亲亲]",

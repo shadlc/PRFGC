@@ -695,18 +695,17 @@ def get_image(robot: "Concerto", file: str):
     resp_dict = {"file": file}
     return api.get_image(robot, resp_dict)
 
-def poke(robot: "Concerto", user_id: str, group_id=""):
+def poke(robot: "Concerto", user_id: str, group_id: str | None=None):
     """
     戳一戳
     :param robot: 机器人类
     :param user_id: 用户ID
     :param group_id: 群ID
     """
-    resp_dict = {"user_id": user_id, "group_id": group_id}
     if group_id:
-        return api.group_poke(robot, resp_dict)
+        return api.group_poke(robot, {"user_id": user_id, "group_id": group_id})
     else:
-        return api.friend_poke(robot, resp_dict)
+        return api.friend_poke(robot, {"user_id": user_id})
 
 def set_model_show(robot: "Concerto", device: str, model_show: str):
     """
