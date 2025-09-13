@@ -113,32 +113,16 @@ def ocr_image(robot: "Concerto", resp: dict):
     return get(robot, url)
 
 def upload_private_file(robot: "Concerto", resp: dict):
-    user_id = resp["user_id"]  # 用户ID
-    file = resp["file"]  # 本地目录
-    name = resp["name"]  # 文件名称
-    url = (
-        "/upload_private_file?group_id="
-        + str(user_id)
-        + "&file="
-        + file
-        + "&name="
-        + name
-    )
-    return get(robot, url)
+    url = "/upload_private_file"
+    return post(robot, url, resp)
 
 def upload_group_file(robot: "Concerto", resp: dict):
-    group_id = resp["group_id"]  # 群号
-    file = resp["file"]  # 本地目录
-    name = resp["name"]  # 文件名称
-    url = (
-        "/upload_group_file?group_id="
-        + str(group_id)
-        + "&file="
-        + file
-        + "&name="
-        + name
-    )
-    return get(robot, url)
+    url = "/upload_group_file"
+    return post(robot, url, resp)
+
+def del_group_file(robot: "Concerto", resp: dict):
+    url = "/delete_group_file"
+    return post(robot, url, resp)
 
 def get_group_msg_history(robot: "Concerto", resp: dict):
     url = "/get_group_msg_history"

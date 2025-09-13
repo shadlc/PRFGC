@@ -202,6 +202,7 @@ class Chat(Module):
                 msg = "请先开启复读记录哦~"
         else:
             return
+        self.success = True
         self.reply(msg, reply=True)
 
     @via(lambda self: self.at_or_private() and self.au(2) and self.match(r"^\s*(\s?(\S+)(说|言)(道|过)?(:|：)(\S+)\s?)+\s*$"))
@@ -233,7 +234,7 @@ class Chat(Module):
         if messages := self.robot.data.get("latest_recall",{}).get(self.owner_id):
             nodes = []
             for msg in messages:
-                if msg.get("time") and time.time() - msg.get("time") > 24 * 3600:
+                if msg.get("time") and time.time() - msg.get("time") > 3600:
                     continue
                 user_id = msg.get("user_id")
                 nickname = msg.get("sender",{}).get("nickname","")

@@ -27,7 +27,7 @@ class Ytdlp(Module):
         ],
     }
     GLOBAL_CONFIG = {
-        "video_path": "", # 如果不使用base64传输，则填入此路径，应该保证QQ API部分程序能获取到相同的对应路径下的文件
+        "video_path": "", # 如果不使用base64传输，则填入此路径，应该保证API部分程序能获取到相同的对应路径下的文件
         "headers": {},
         "ydl": {
             "paths": {
@@ -125,7 +125,8 @@ class Ytdlp(Module):
         url = url_match.groups()[0]
         opts = self.get_options(url)
         try:
-            set_emoji(self.robot, self.event.msg_id, 124)
+            if not self.is_private():
+                set_emoji(self.robot, self.event.msg_id, 124)
             info = self.get_info(url, opts)
             if info.get("type") == "playlist" and ("bilibili.com" in url or "b23.tv" in url):
                 url = info["url"] + "?p=1"
@@ -143,12 +144,7 @@ class Ytdlp(Module):
                 remain = int(cool_down - time.time() + int(user_task[-1][2]))
                 self.reply(f"视频解析功能每{cool_down}秒才能使用一次，你还剩{remain}秒", reply=True)
                 return
-            if user_id not in self.config[self.owner_id]["tasks"]:
-                self.config[self.owner_id]["tasks"][user_id] = []
-            self.config[self.owner_id]["tasks"][user_id].append([
-                info["url"], user_id, str(int(time.time()))
-            ])
-            self.save_config()
+            self.record_download(user_id, info["url"])
             name = info["title"]
             if series := info["series"]:
                 name = f"{series} {name}"
@@ -164,7 +160,7 @@ class Ytdlp(Module):
                 opts["format"] = "bv[height<=1000]+ba/b"
             if self.is_private():
                 msg = self.parse_info(info)
-                msg = f"正在解析{name}"
+                msg = f"正在解析\n{msg}"
                 self.reply(msg, reply=True)
             else:
                 set_emoji(self.robot, self.event.msg_id, 60)
@@ -182,7 +178,8 @@ class Ytdlp(Module):
             if file_size > 100 * 1024 * 1024:
                 self.reply(f"视频{video_name}过大，上传失败，还是去APP观看吧~")
                 return
-            set_emoji(self.robot, self.event.msg_id, 66)
+            if not self.is_private():
+                set_emoji(self.robot, self.event.msg_id, 66)
             if video_path := self.config["video_path"]:
                 video_path = Path(os.path.join(video_path, video_name)).as_posix()
                 msg = f"[CQ:video,file=file://{urllib.parse.quote(video_path)}]"
@@ -223,6 +220,15 @@ class Ytdlp(Module):
             msg = "视频解析功能已关闭"
             self.save_config()
         self.reply(msg)
+
+    def record_download(self, user_id: str, url: str):
+        if user_id not in self.config[self.owner_id]["tasks"]:
+            self.config[self.owner_id]["tasks"][user_id] = []
+        self.config[self.owner_id]["tasks"][user_id] = self.config[self.owner_id]["tasks"][user_id][:10]
+        self.config[self.owner_id]["tasks"][user_id].append([
+            url, user_id, int(time.time())
+        ])
+        self.save_config()
 
     def get_options(self, url: str) -> dict:
         """获取配置参数"""

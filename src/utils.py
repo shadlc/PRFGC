@@ -765,9 +765,17 @@ def upload_file(robot: "Concerto", file: str, name: str, user_id: str | None=Non
     :param group_id: 群ID
     """
     if group_id:
-        api.upload_group_file(robot, {"group_id": group_id, "file": file, "name": name, "folder_id": folder_id})
+        return api.upload_group_file(robot, {"group_id": group_id, "file": file, "name": name, "folder_id": folder_id})
     else:
-        api.upload_private_file(robot, {"user_id": user_id, "file": file, "name": name})
+        return api.upload_private_file(robot, {"user_id": user_id, "file": file, "name": name})
+
+def del_file(robot: "Concerto", file_id: str, group_id: str):
+    """
+    删除文件
+    :param file_id: 文件ID
+    :param group_id: 群ID
+    """
+    return api.del_group_file(robot, {"file_id": file_id, "group_id": group_id})
 
 def send_group_ai_record(robot: "Concerto", group_id: str, character: str, text: str):
     """
