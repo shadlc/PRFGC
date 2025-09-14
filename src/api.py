@@ -16,7 +16,7 @@ def get(robot: "Concerto", url):
     try:
         get_url = robot.config.api_base + url
         robot.request_list.append(f"GET{url}")
-        data = httpx.Client().get(get_url, timeout=30)
+        data = httpx.Client().get(get_url, timeout=60)
         rev_json = data.json()
         if robot.config.is_debug:
             robot.printf(f"{Fore.YELLOW}[DATA]{Fore.RESET} GET请求{Fore.MAGENTA}[{get_url}]{Fore.RESET}后返回{Fore.YELLOW}{rev_json}{Fore.RESET}")
@@ -35,7 +35,7 @@ def post(robot: "Concerto", url, data):
         post_url = robot.config.api_base + url
         robot.request_list.append(f"POST{url} | {data}")
         header = {"Content-Type": "application/json"}
-        data = httpx.Client().post(post_url, headers=header, data=data, timeout=30)
+        data = httpx.Client().post(post_url, headers=header, data=data, timeout=60)
         rev_json = data.json()
         if robot.config.is_debug:
             robot.printf(f"{Fore.YELLOW}[DATA]{Fore.RESET} POST请求{Fore.MAGENTA}[{post_url}]{Fore.RESET}后返回{Fore.YELLOW}{rev_json}{Fore.RESET}")

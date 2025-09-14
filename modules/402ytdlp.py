@@ -64,7 +64,7 @@ class Ytdlp(Module):
         reply_match = self.match(r"\[CQ:reply,id=([^\]]+?)\]")
         url = ""
         if reply_match:
-            msg_id = reply_match.groups()[0]
+            msg_id = reply_match.group(1)
             reply_msg = get_msg(self.robot, msg_id)
             msg = reply_msg["data"]["message"].replace("\\", "")
             if not status_ok(reply_msg):
@@ -78,7 +78,7 @@ class Ytdlp(Module):
         if not url_match:
             return
         self.success = True
-        url = url_match.groups()[0]
+        url = url_match.group(1)
         opts = self.get_options(url)
         try:
             set_emoji(self.robot, self.event.msg_id, 124)
@@ -106,7 +106,7 @@ class Ytdlp(Module):
         reply_match = self.match(r"\[CQ:reply,id=([^\]]+?)\]")
         url = ""
         if reply_match:
-            msg_id = reply_match.groups()[0]
+            msg_id = reply_match.group(1)
             reply_msg = get_msg(self.robot, msg_id)
             if not status_ok(reply_msg):
                 return
@@ -122,19 +122,20 @@ class Ytdlp(Module):
         self.success = True
         video_path = ""
         tasks = self.config[self.owner_id]["tasks"]
-        url = url_match.groups()[0]
+        url = url_match.group(1)
         opts = self.get_options(url)
         try:
             if not self.is_private():
                 set_emoji(self.robot, self.event.msg_id, 124)
             info = self.get_info(url, opts)
-            if info.get("type") == "playlist" and ("bilibili.com" in url or "b23.tv" in url):
+            if not info:
+                return self.reply("无效视频链接!", reply=True)
+            elif info.get("type") == "playlist" and ("bilibili.com" in url or "b23.tv" in url):
                 url = info["url"] + "?p=1"
             elif info.get("type") == "playlist":
                 msg = self.parse_info(info)
                 msg = f"解析成功，但不支持下载视频合辑，请使用单集链接!\n{msg}"
-                self.reply(msg)
-                return
+                return self.reply(msg, reply=True)
             user_id = self.event.user_id
             user_task = tasks.get(user_id)
             cool_down = self.config[self.owner_id]["cool_down"]
@@ -142,8 +143,7 @@ class Ytdlp(Module):
                 pass
             elif user_task and time.time() - int(user_task[-1][2]) < cool_down:
                 remain = int(cool_down - time.time() + int(user_task[-1][2]))
-                self.reply(f"视频解析功能每{cool_down}秒才能使用一次，你还剩{remain}秒", reply=True)
-                return
+                return self.reply(f"视频解析功能每{cool_down}秒才能使用一次，你还剩{remain}秒", reply=True)
             self.record_download(user_id, info["url"])
             name = info["title"]
             if series := info["series"]:
@@ -170,14 +170,12 @@ class Ytdlp(Module):
             if not os.path.exists(file_path):
                 file_path = f"{file_path}.{ext}"
             if not os.path.exists(file_path):
-                self.reply("啊咧~视频不见啦，下载失败惹~")
-                return
+                return self.reply("啊咧~视频不见啦，下载失败惹~", reply=True)
             video_name = file_path.split("/").pop()
             file_size = os.path.getsize(file_path)
             self.printf(f"视频{video_name}下载完成，大小{calc_size(file_size)}")
             if file_size > 100 * 1024 * 1024:
-                self.reply(f"视频{video_name}过大，上传失败，还是去APP观看吧~")
-                return
+                return self.reply(f"视频{video_name}过大，上传失败，还是去APP观看吧~", reply=True)
             if not self.is_private():
                 set_emoji(self.robot, self.event.msg_id, 66)
             if video_path := self.config["video_path"]:

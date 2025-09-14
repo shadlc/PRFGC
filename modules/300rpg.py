@@ -773,7 +773,7 @@ class RPG(Module):
     def hp_change(self):
         """HP 管理"""
         try:
-            change = int(self.match(r"^hp([+-]\d+)$").groups()[0])
+            change = int(self.match(r"^hp([+-]\d+)$").group(1))
             pc = self.get_user_pc()
             hp = pc.get("HP", 10)
             new_hp = max(0, hp + change)
@@ -833,7 +833,7 @@ class RPG(Module):
         msg = ""
 
         if self.match(r"^\.pc new\s?(\S+)?"):
-            name = self.match(r"^\.pc new\s?(\S+)?").groups()[0] or "无名氏"
+            name = self.match(r"^\.pc new\s?(\S+)?").group(1) or "无名氏"
             pc = {"Name": name, "HP": 10, "MP": 10, "力量": 50, "体质": 50, "敏捷": 50, "理智": 50, "SAN": 50}
             self.save_user_pc(pc)
             user_name = get_user_name(self.robot, self.event.user_id)
@@ -862,7 +862,7 @@ class RPG(Module):
             else:
                 msg = "尚未建立人物卡"
         elif self.match(r"^\.pc show\s+@?(\d+)$"):
-            target_id = self.match(r"^\.pc show\s+@?(\d+)$").groups()[0]
+            target_id = self.match(r"^\.pc show\s+@?(\d+)$").group(1)
             pc = self.get_user_pc(target_id)
             if pc:
                 user_name = get_user_name(self.robot, target_id)
@@ -951,7 +951,7 @@ class RPG(Module):
         msg = ""
 
         if self.match(r"^\.team create\s+(\S+)$"):
-            team_name = self.match(r"^\.team create\s+(\S+)$").groups()[0]
+            team_name = self.match(r"^\.team create\s+(\S+)$").group(1)
             user_id = self.event.user_id
             user_name = get_user_name(self.robot, user_id)
 
@@ -974,7 +974,7 @@ class RPG(Module):
             self.add_log("team_create", {"team_name": team_name})
 
         elif self.match(r"^\.team join\s+(\S+)$"):
-            team_name = self.match(r"^\.team join\s+(\S+)$").groups()[0]
+            team_name = self.match(r"^\.team join\s+(\S+)$").group(1)
             if team_name not in self.config[self.owner_id]["teams"]:
                 msg = f"❌ 队伍 {team_name} 不存在"
             else:

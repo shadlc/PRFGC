@@ -147,7 +147,7 @@ class ExecuteCmd(object):
 
     def deop(self, argv=""):
         if re.search(r"(\d+)", argv):
-            user_id = re.search(r"^(\d+)", argv).groups()[0]
+            user_id = re.search(r"^(\d+)", argv).group(1)
             user_name = get_user_name(self.robot, user_id)
             if user_id in self.robot.config.admin_list:
                 self.robot.config.admin_list.remove(user_id)
@@ -164,7 +164,7 @@ class ExecuteCmd(object):
 
     def device(self, argv=""):
         if re.search(r"(.+)", argv):
-            device = re.search(r"(.+)", argv).groups()[0]
+            device = re.search(r"(.+)", argv).group(1)
             result = set_model_show(self.robot, device, device)
             if status_ok(result):
                 self.printf(f"成功设置新登陆设备为{Fore.MAGENTA}{device}{Fore.RESET}")
@@ -213,7 +213,7 @@ class ExecuteCmd(object):
 
     def get(self, argv=""):
         if re.search(r"user\s+(\d+)", argv):
-            user_id = re.search(r"user\s+(\d+)", argv).groups()[0]
+            user_id = re.search(r"user\s+(\d+)", argv).group(1)
             result = get_stranger_info(self.robot, user_id)
             if status_ok(result):
                 result = result["data"]
@@ -239,7 +239,7 @@ class ExecuteCmd(object):
             else:
                 self.printf(f"查无此号！{result.get("message")}")
         elif re.search(r"group\s+(\d+)", argv):
-            group_id = re.search(r"group\s+(\d+)", argv).groups()[0]
+            group_id = re.search(r"group\s+(\d+)", argv).group(1)
             result = get_group_info(self.robot, group_id)
             if status_ok(result):
                 data = result.get("data")
@@ -262,7 +262,7 @@ class ExecuteCmd(object):
 
     def group(self, argv=""):
         if re.search(r"add\s+(\d+)", argv):
-            group_id = re.search(r"\s+(\d+)", argv).groups()[0].strip()
+            group_id = re.search(r"\s+(\d+)", argv).group(1).strip()
             group_name = get_group_name(self.robot, group_id)
             if group_id not in self.robot.config.rev_group:
                 self.robot.config.rev_group.append(group_id)
@@ -275,7 +275,7 @@ class ExecuteCmd(object):
                     f"群{Fore.MAGENTA}{group_name}({group_id}){Fore.RESET}已经在对接群列表中！"
                 )
         elif re.search(r"remove\s+(\d+)", argv):
-            group_id = re.search(r"\s+(\d+)", argv).groups()[0].strip()
+            group_id = re.search(r"\s+(\d+)", argv).group(1).strip()
             group_name = get_group_name(self.robot, group_id)
             if group_id in self.robot.config.rev_group:
                 self.robot.config.rev_group.remove(group_id)
@@ -288,7 +288,7 @@ class ExecuteCmd(object):
                     f"群{Fore.MAGENTA}{group_name}({group_id}){Fore.RESET}不在对接群列表中！"
                 )
         elif re.search(r"main\s+(\d+)", argv):
-            group_id = re.search(r"\s+(\d+)", argv).groups()[0].strip()
+            group_id = re.search(r"\s+(\d+)", argv).group(1).strip()
             group_name = get_group_name(self.robot, group_id)
             if group_id in self.robot.config.rev_group:
                 self.robot.config.rev_group.remove(group_id)
@@ -347,7 +347,7 @@ class ExecuteCmd(object):
         all_page = int(len(self.robot.cmd) / 10 + 1)
         page = 1
         if re.search(r"(\d+)", argv):
-            page = sorted([1, int(re.search(r"(\d+)", argv).groups()[0]), all_page])[1]
+            page = sorted([1, int(re.search(r"(\d+)", argv).group(1)), all_page])[1]
         if re.search(r"^(all)$", argv):
             page = 0
         self.printf(f"============帮助============")
@@ -361,7 +361,7 @@ class ExecuteCmd(object):
 
     def history(self, argv=""):
         if re.search(r"(\d+)$", argv):
-            uid = re.search(r"(\d+)$", argv).groups()[0]
+            uid = re.search(r"(\d+)$", argv).group(1)
             if ("u" + uid) in self.robot.data:
                 self.printf(f"与{Fore.MAGENTA}{get_user_name(self.robot, uid)}{uid}{Fore.RESET}的历史消息:")
                 past_msg = self.robot.data["u" + uid].past_message
@@ -531,7 +531,7 @@ class ExecuteCmd(object):
 
     def ocr(self, argv=""):
         if re.search(r"(\d+)", argv):
-            img_id = re.search(r"(.+)", argv).groups()[0]
+            img_id = re.search(r"(.+)", argv).group(1)
             result = ocr_image(self.robot, img_id)
             if status_ok(result):
                 result = result["data"]
@@ -551,7 +551,7 @@ class ExecuteCmd(object):
 
     def op(self, argv=""):
         if re.search(r"(\d+)", argv):
-            user_id = re.search(r"(\d+)", argv).groups()[0]
+            user_id = re.search(r"(\d+)", argv).group(1)
             user_name = get_user_name(self.robot, user_id)
             if user_id not in self.robot.config.admin_list:
                 self.robot.config.admin_list.append(user_id)
@@ -568,7 +568,7 @@ class ExecuteCmd(object):
 
     def read(self, argv=""):
         if re.search(r"(.+)", argv):
-            msg_id = re.search(r"(.+)", argv).groups()[0]
+            msg_id = re.search(r"(.+)", argv).group(1)
             msg_list = get_forward_msg(self.robot, msg_id).get("data", {}).get("messages")
             if msg_list:
                 group = 0
@@ -593,7 +593,7 @@ class ExecuteCmd(object):
 
     def poke(self, argv=""):
         if re.search(r"(.+)", argv):
-            user_id = re.search(r"(.+)", argv).groups()[0]
+            user_id = re.search(r"(.+)", argv).group(1)
             user_name = get_user_name(self.robot, user_id)
             result = poke(self.robot, user_id)
             if status_ok(result):
@@ -624,7 +624,7 @@ class ExecuteCmd(object):
 
     def recall(self, argv=""):
         if re.search(r"(.+)", argv):
-            msg_id = re.search(r"(.+)", argv).groups()[0]
+            msg_id = re.search(r"(.+)", argv).group(1)
             msg = ""
             past_msg = self.robot.self_message
             for one_msg in past_msg:
@@ -685,7 +685,7 @@ class ExecuteCmd(object):
             user_name = get_user_name(self.robot, user_id)
             group_id = rev.get("group_id")
             group_name = get_group_name(self.robot, group_id)
-            reply_msg = re.search(r"(.+)", argv).groups()[0]
+            reply_msg = re.search(r"(.+)", argv).group(1)
             reply_msg = f"[CQ:reply,id={msg_id}]{reply_msg}"
             reply_type = "group" if group_id else "private"
             target_id = group_id if group_id else user_id
@@ -718,7 +718,7 @@ class ExecuteCmd(object):
             user_name = get_user_name(self.robot, user_id)
             group_id = rev["group_id"]
             group_name = get_group_name(self.robot, group_id)
-            reply_msg = re.search(r"(.+)", argv).groups()[0]
+            reply_msg = re.search(r"(.+)", argv).group(1)
             result = quick_reply(self.robot, rev, reply_msg)
             if status_ok(result):
                 target_str = f"{Fore.MAGENTA}{user_name}({user_id}){Fore.RESET}"
@@ -737,7 +737,7 @@ class ExecuteCmd(object):
 
     def request(self, argv=""):
         if re.search(r"(get|GET)\s+(.+)", argv):
-            url = re.search(r"\s+(.+)", argv).groups()[0]
+            url = re.search(r"\s+(.+)", argv).group(1)
             result = get(self.robot, url)
             if status_ok(result):
                 self.printf(f"GET请求发送成功，返回为{Fore.YELLOW}{result}{Fore.RESET}")
@@ -763,7 +763,7 @@ class ExecuteCmd(object):
     def say(self, argv=""):
         if self.robot.config.rev_group:
             if re.search(r"(.+)", argv):
-                msg = re.search(r"(.+)", argv).groups()[0]
+                msg = re.search(r"(.+)", argv).group(1)
                 group_id = self.robot.config.rev_group[0]
                 group_name = get_group_name(self.robot, group_id)
                 result = send_msg(self.robot, "group", group_id, msg)
@@ -785,7 +785,7 @@ class ExecuteCmd(object):
     def set(self, argv=""):
         if re.search(r"self\s+(\S+)$", argv):
             if re.search(r"self\s+(\d+)$", argv):
-                self.robot.self_id = re.search(r"self\s(\d+)$", argv).groups()[0]
+                self.robot.self_id = re.search(r"self\s(\d+)$", argv).group(1)
                 self.robot.self_name = get_user_name(self.robot, self.robot.self_id)
                 self.robot.at_info = "[CQ:at,qq=" + str(self.robot.self_id) + "]"
                 self.printf(
@@ -885,7 +885,7 @@ class ExecuteCmd(object):
                 self.robot.config.min_image_width = sorted(
                     [
                         10,
-                        int(re.search(r"minsize\s+(\d+)", argv).groups()[0]),
+                        int(re.search(r"minsize\s+(\d+)", argv).group(1)),
                         self.robot.config.max_image_width,
                     ]
                 )[1]
@@ -898,7 +898,7 @@ class ExecuteCmd(object):
                 self.robot.config.max_image_width = sorted(
                     [
                         self.robot.config.min_image_width,
-                        int(re.search(r"size\s(\d+)", argv).groups()[0]),
+                        int(re.search(r"size\s(\d+)", argv).group(1)),
                         1000,
                     ]
                 )[1]
@@ -916,7 +916,7 @@ class ExecuteCmd(object):
                     [10, int(size[0]), int(size[1]), 1000]
                 )[2]
             elif re.search(r"\s+(\d+)", argv):
-                size = int(re.search(r"\s(\d+)", argv).groups()[0])
+                size = int(re.search(r"\s(\d+)", argv).group(1))
                 self.robot.config.min_image_width = sorted([10, size, 1000])[1]
                 self.robot.config.max_image_width = self.robot.config.min_image_width
             self.robot.config.save("min_image_width", self.robot.config.min_image_width)
@@ -958,7 +958,7 @@ class ExecuteCmd(object):
 
     def sign(self, argv=""):
         if re.search(r"(\d+)", argv):
-            group_id = re.search(r"(\d+)", argv).groups()[0]
+            group_id = re.search(r"(\d+)", argv).group(1)
             group_name = get_group_name(self.robot, group_id)
             if not group_name:
                 self.warnf(f"未查找到群聊ID: {group_id}")
@@ -982,7 +982,7 @@ class ExecuteCmd(object):
         if re.search(r"(错误|error|ERROR)", argv):
             raise RuntimeError("手动触发了一个运行时错误")
         else:
-            thing = re.search(r"(.*)", argv).groups()[0]
+            thing = re.search(r"(.*)", argv).group(1)
             if not thing:
                 thing = "测试"
             msg = f"{thing} OK!"

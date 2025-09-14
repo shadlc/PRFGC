@@ -85,8 +85,8 @@ class Waifu(Module):
         """查询二次元老婆"""
         today = datetime.date.today().strftime("%Y%m%d")
         user_id = self.event.user_id
-        if inputs := self.match(r"\[CQ:at,qq=(.*?)\]"):
-            user_id = inputs.groups()[0]
+        if match := self.match(r"\[CQ:at,qq=(.*?)\]"):
+            user_id = match.group(1)
         user_name = get_user_name(self.robot, user_id)
         waives = self.config[self.owner_id]["waifu"]
         waifu = None
@@ -117,7 +117,7 @@ class Waifu(Module):
                 return self.reply("请注明二次元老婆名称~")
             elif not ret:
                 return self.reply("请附带二次元老婆图片~")
-            url = html.unescape(ret.groups()[1])
+            url = html.unescape(ret.group(2))
             self.save_waifu(url, waifu_name)
             self.reply(f"{waifu_name}已增加~", reply=True)
         except Exception:

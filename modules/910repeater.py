@@ -76,7 +76,7 @@ class Repeater(Module):
     @via(lambda self: self.group_at() and self.au(2) and self.match(r"^(不|禁止)?(复读|复读)\s+(\S+)$"))
     def exclude(self):
         """复读排除"""
-        text = self.match(r"^(不|禁止)?(复读|复读)\s+(\S+)$").groups()[2]
+        text = self.match(r"^(不|禁止)?(复读|复读)\s+(\S+)$").group(3)
         if self.match(r"(不|禁止)"):
             self.config[self.owner_id]["exclude"].append(text)
             self.save_config()

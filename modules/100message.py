@@ -43,7 +43,7 @@ class Message(Module):
     def help(self):
         auth_level = self.auth
         if result := self.match(r"帮助(\d)"):
-            auth_level = max(auth_level, int(result.groups()[0]))
+            auth_level = max(auth_level, int(result.group(1)))
         help_list = []
         for mod in self.robot.modules.values():
             if mod.NAME is None or not isinstance(mod.HELP, dict):
@@ -64,7 +64,7 @@ class Message(Module):
     @via(lambda self: self.at_or_private() and self.au(1) and self.match(r"^(增加|添加|删除|取消)?\s?管理员"))
     def admin(self):
         if self.match(r"^(增加|添加)\s?管理员\s?[0-9]+"):
-            user_id = self.match(r"^(增加|添加)\s?管理员\s?([0-9]+)").groups()[1]
+            user_id = self.match(r"^(增加|添加)\s?管理员\s?([0-9]+)").group(2)
             user_name = get_user_name(self.robot, user_id)
             if user_id not in self.robot.config.admin_list:
                 self.robot.config.admin_list.append(user_id)
@@ -76,7 +76,7 @@ class Message(Module):
                 self.warnf(msg)
 
         elif self.match(r"^(删除|取消)\s?管理员\s?[0-9]+"):
-            user_id = self.match(r"^(删除|取消)管理员\s?([0-9]+)").groups()[1]
+            user_id = self.match(r"^(删除|取消)管理员\s?([0-9]+)").group(2)
             user_name = get_user_name(self.robot, user_id)
             if user_id in self.robot.config.admin_list:
                 self.robot.config.admin_list.remove(user_id)
@@ -150,7 +150,7 @@ class Message(Module):
 
     @via(lambda self: self.at_or_private() and self.match(r"^计时[0-9]+"))
     def delay(self):
-        sleep_time = int(self.match(r"([0-9]+)").groups()[0])
+        sleep_time = int(self.match(r"([0-9]+)").group(1))
         msg = f"计时{sleep_time}秒开始"
         self.reply(msg)
         time.sleep(sleep_time)
@@ -210,7 +210,7 @@ class Message(Module):
             else:
                 msg = f"发送消息{send}失败!"
         else:
-            msg = self.match(r"说\s?(\S*)").groups()[0]
+            msg = self.match(r"说\s?(\S*)").group(1)
         self.reply(msg)
 
     @via(lambda self: self.at_or_private() and self.au(1) and self.match(r"^(开启|关闭)?静默(模式)?$"))
@@ -234,7 +234,7 @@ class Message(Module):
         if self.match(r"^测试错误"):
             raise RuntimeError("测试错误")
         elif self.match(r"^测试(ip|IP)\s(\S*)"):
-            ip = self.match(r"^测试(ip|IP)\s(\S*)").groups()[1]
+            ip = self.match(r"^测试(ip|IP)\s(\S*)").group(2)
             headers = {
                 "Content-Type": "application/json;charset=UTF-8",
                 "token": self.config.get("ip_test_token",""),
@@ -254,7 +254,7 @@ class Message(Module):
             except httpx.ConnectError as e:
                 msg = f"ip138.com服务器请求错误！{e}"
         else:
-            thing = self.match(r"^测试(.*)").groups()[0]
+            thing = self.match(r"^测试(.*)").group(1)
             msg = f"测试{thing}OK!"
         self.reply(msg)
 
@@ -263,7 +263,7 @@ class Message(Module):
         if self.match(r"语音\s?\S+"):
             msg = (
                 "[CQ:tts,text="
-                + self.match(r"语音\s?(\S+)").groups()[0]
+                + self.match(r"语音\s?(\S+)").group(1)
                 + " ]"
             )
         else:

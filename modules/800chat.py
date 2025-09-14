@@ -112,7 +112,7 @@ class Chat(Module):
                 else:
                     msg = "正在生成历史词云..."
                 text = ""
-                user_name = result.groups()[1]
+                user_name = result.group(2)
                 user_id = None
                 if user_name:
                     user_id = self.get_uid(user_name)
@@ -195,7 +195,7 @@ class Chat(Module):
                     msg = "没有复读记录哦~"
                 else:
                     msg = self.format_repeat_record(data, gen_type)
-                    gen_type = match.groups()[1] or "历史"
+                    gen_type = match.group(2) or "历史"
                     self.reply_forward(self.node(msg), source=f"{gen_type}复读排行")
                     return
             else:
@@ -248,7 +248,7 @@ class Chat(Module):
     @via(lambda self: self.at_or_private() and self.au(2) and self.match(r"^\s*\[CQ:reply,id=([^\]]+?)\]\s*$"), success=False)
     def sticker_url(self):
         """获取表情链接"""
-        msg_id = self.match(r"^\s*\[CQ:reply,id=([^\]]+?)\]\s*$").groups()[0]
+        msg_id = self.match(r"^\s*\[CQ:reply,id=([^\]]+?)\]\s*$").group(1)
         reply_msg = get_msg(self.robot, msg_id)
         msg = reply_msg["data"]["message"]
         if status_ok(reply_msg) and re.match(r"^\s*\[CQ:image,([^\]]+?)\]\s*$", msg):
@@ -573,7 +573,7 @@ class Chat(Module):
     def wordcloud_colormap(self):
         """更改词云配色"""
         if self.match(r"#(\S+)"):
-            colormap = self.match(r"#(\S+)").groups()[0]
+            colormap = self.match(r"#(\S+)").group(1)
             self.config[self.owner_id]["wordcloud"]["colormap"] = colormap
             self.save_config()
             msg = "词云配色设置成功！"
