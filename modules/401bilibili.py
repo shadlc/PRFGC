@@ -950,11 +950,11 @@ class Bilibili(Module):
             user_id = int(owner_id[1:])
             return send_msg(self.robot, "private", user_id, msg)
 
-    def reply_forward_back(self, owner_id: str, nodes: list, source=None, hidden=True) -> dict:
+    def reply_forward_back(self, owner_id: str, nodes: list, source=None) -> dict:
         """回复消息"""
         if owner_id.startswith("g"):
             group_id = int(owner_id[1:])
-            return send_forward_msg(self.robot, nodes, group_id=group_id, source=source, hidden=hidden)
+            return send_forward_msg(self.robot, nodes, group_id=group_id, source=source)
         else:
             user_id = int(owner_id[1:])
-            return send_forward_msg(self.robot, nodes, user_id=user_id, source=source, hidden=hidden)
+            return send_forward_msg(self.robot, nodes, user_id=user_id, source=source)

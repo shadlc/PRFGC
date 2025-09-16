@@ -390,11 +390,13 @@ def build_node(*args, **kwargs):
     user_id,nickname,content
     """
     content = args[0] if len(args) == 1 else list(args)
+    user_id = kwargs.get("user_id", "0")
+    nickname = None if kwargs.get("user_id") else kwargs.get("nickname", " ")
     data = {
             "type": "node",
             "data": {
-                "user_id": kwargs.get("user_id", "0"),
-                "nickname": kwargs.get("nickname", ""),
+                "user_id": user_id,
+                "nickname": nickname,
                 "content": content
             }
         }
@@ -529,7 +531,7 @@ def get_forward_msg(robot: "Concerto", msg_id: str):
     resp_dict = {"message_id": msg_id}
     return api.get_forward_msg(robot, resp_dict)
 
-def send_forward_msg(robot: "Concerto", nodes: list, group_id=None, user_id=None, source=None, hidden=False):
+def send_forward_msg(robot: "Concerto", nodes: list, group_id=None, user_id=None, source=None, summary=None):
     """
     发送转发消息
     :param robot: 机器人类
@@ -539,7 +541,9 @@ def send_forward_msg(robot: "Concerto", nodes: list, group_id=None, user_id=None
     :param source: 来源字段
     :return: 发送消息后返回的json信息
     """
-    resp_dict = {"messages": nodes, "source": source}
+    if not summary:
+        summary = "ConcertBot"
+    resp_dict = {"messages": nodes, "source": source, "summary": summary}
     if group_id:
         robot.printf(f"{Fore.GREEN}[SEND] {Fore.RESET}向群{Fore.MAGENTA}{get_group_name(robot, group_id)}({group_id}){Fore.RESET}发送消息：{nodes}")
         resp_dict["group_id"] = group_id
@@ -548,8 +552,6 @@ def send_forward_msg(robot: "Concerto", nodes: list, group_id=None, user_id=None
         resp_dict["user_id"] = user_id
     else:
         return
-    if hidden:
-        resp_dict["news"] = []
     return api.send_forward_msg(robot, resp_dict)
 
 
@@ -1175,12 +1177,12 @@ class Module:
             reply = True
         return reply_event(self.robot, self.event, msg, reply=reply, force=force)
 
-    def reply_forward(self, nodes: list, source=None, hidden=True):
+    def reply_forward(self, nodes: list, source=None, summary=None):
         """快捷回复转发消息"""
         if self.event.group_id:
-            send_forward_msg(self.robot, nodes, group_id=self.event.group_id, source=source, hidden=hidden)
+            send_forward_msg(self.robot, nodes, group_id=self.event.group_id, source=source, summary=summary)
         else:
-            send_forward_msg(self.robot, nodes, user_id=self.event.user_id, source=source, hidden=hidden)
+            send_forward_msg(self.robot, nodes, user_id=self.event.user_id, source=source, summary=summary)
 
     def printf(self, msg, end="\n", console=True, flush=False):
         """

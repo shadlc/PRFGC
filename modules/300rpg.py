@@ -294,80 +294,57 @@ class RPG(Module):
     @via(lambda self: self.au(2) and self.match(r"^\.r[0-9dD\+\-\s]*$"))
     def roll(self):
         """掷骰子"""
-        def process_dice_part(part, detail, is_positive):
-            """处理骰子表达式的一部分"""
+        def process_dice_part(part, detail):
+            """处理骰子表达式的一部分 (含正负号)"""
             if not part:
                 return 0
-    
-            # 处理骰子部分
+            sign = 1
+            if part.startswith('-'):
+                sign = -1
+                part = part[1:]
+            elif part.startswith('+'):
+                part = part[1:]
+            # 处理骰子表达式 (NdM)
             if "d" in part.lower():
-                if part.startswith('-'):
-                    num, sides = part[1:].lower().split("d", 1)
-                    sign = -1
-                else:
-                    num, sides = part.lower().split("d", 1)
-                    sign = 1
-
+                num, sides = part.lower().split("d", 1)
                 num = int(num) if num.isdigit() else 1
-                sides = int(sides) if sides.isdigit() else 6  # 默认6面骰
-    
-                if num > 100:  # 限制骰子数量
-                    num = 100
-                if sides > 1000:  # 限制骰面数
-                    sides = 1000
-    
+                sides = int(sides) if sides.isdigit() else 6
+                # 限制最大值
+                num = min(num, 100)
+                sides = min(sides, 1000)
                 rolls = [random.randint(1, sides) for _ in range(num)]
                 subtotal = sum(rolls) * sign
-                detail.append(f"{part}={rolls}->{subtotal}")
+                detail.append(f"{'-' if sign < 0 else ''}{num}d{sides}={rolls}->{subtotal}")
                 return subtotal
             else:
                 # 处理纯数字部分
                 try:
-                    val = int(part)
-                    if not is_positive:
-                        val = -val
+                    val = int(part) * sign
                     detail.append(str(val))
                     return val
                 except ValueError:
                     return 0
 
-        expr = self.event.msg[1:].lower().replace(" ", "")
-
-        # 处理空表达式 ".r"
+        expr = self.event.msg[2:].lower().replace(" ", "")  # 去掉前缀 ".r"
+        # 默认情况 ".r"
         if not expr:
             expr = "1d6"
-
         try:
-            total = 0
             detail = []
-
-            # 处理加减法表达式
-            parts = re.split(r'([+-])', expr)
-            if not parts[0]:  # 处理以符号开头的情况
-                parts = parts[1:]
-
-            current_sign = 1
-            for part in parts:
-                if part == '+':
-                    current_sign = 1
-                elif part == '-':
-                    current_sign = -1
-                else:
-                    total += process_dice_part(part, detail, current_sign == 1)
-
+            # 用正则切割所有项 (包含符号)，保证每部分都有 ± 前缀
+            parts = re.findall(r'[+-]?\d*d?\d*', expr)
+            parts = [p for p in parts if p]  # 去掉空串
+            total = sum(process_dice_part(part, detail) for part in parts)
             user_name = get_user_name(self.robot, self.event.user_id)
-            msg = f"🎲 {user_name} 掷骰: {total}\n({'; '.join([str(d) for d in detail])})"
-
+            msg = f"🎲 {user_name} 掷骰: {total}\n({', '.join(detail)})"
             # 记录日志
             self.add_log("roll", {
                 "expression": expr,
                 "result": total,
                 "details": detail
             })
-
         except Exception as e:
             msg = f"骰子表达式错误: {expr}\n错误: {str(e)}"
-
         self.reply(msg)
 
     @via(lambda self: self.au(2) and self.match(r"^\.ra\s?\S*$"))

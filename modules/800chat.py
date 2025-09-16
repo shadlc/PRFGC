@@ -223,7 +223,7 @@ class Chat(Module):
                 uid = self.event.user_id
             msg_list.append(self.node(content, user_id=uid, nickname=name))
         if msg_list:
-            self.reply_forward(msg_list, hidden=False)
+            self.reply_forward(msg_list)
         else:
             msg = "生成转发消息错误~"
             self.reply(msg)
@@ -241,7 +241,7 @@ class Chat(Module):
                 content = msg.get("raw_message","")
                 content = re.sub(r",sub_type=\d", "", content)
                 nodes.append(self.node(content, user_id=user_id, nickname=nickname))
-            self.reply_forward(nodes, "撤回消息列表", hidden=False)
+            self.reply_forward(nodes, "撤回消息列表")
         else:
             self.reply("什么也没有哦~")
 
