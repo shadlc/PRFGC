@@ -1008,6 +1008,8 @@ class Event:
         self.msg = html.unescape(raw.get("message", ""))
         if "CQ:json" in self.msg:
             self.msg = re.sub(r"(\s)+", "", self.msg)
+        # 消息内容，去除AT信息
+        self.text = self.msg.replace(self.robot.at_info, "").strip()
         # 发送者ID
         self.sender_id = str(raw.get("sender_id", ""))
         # 发送者QQ号
@@ -1096,8 +1098,7 @@ class Module:
 
     def match(self, pattern: str):
         """消息规则匹配"""
-        msg = self.event.msg.replace(self.robot.at_info, "").strip()
-        return re.search(pattern, msg)
+        return re.search(pattern, self.event.text)
 
     def is_self_send(self):
         """判断是不是自己发送的数据"""

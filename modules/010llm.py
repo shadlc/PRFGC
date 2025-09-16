@@ -36,7 +36,7 @@ class LLM(Module):
         """异步上下文管理器退出时关闭资源"""
         await self.close()
 
-    def _build_model_map(self) -> Dict[str, Dict]:
+    def build_model_map(self) -> Dict[str, Dict]:
         """构建模型名称到配置的映射"""
         model_map = {}
         for model in self.config["models"]:
@@ -51,9 +51,9 @@ class LLM(Module):
                 }
         return model_map
 
-    def _get_request_params(self, model_name: str | None = None) -> Dict:
+    def get_request_params(self, model_name: str | None = None) -> Dict:
         """获取请求参数"""
-        model_map = self._build_model_map()
+        model_map = self.build_model_map()
         if len(model_map) == 0:
             raise ValueError("未找到任何可用模型!")
         if model_name:
@@ -73,39 +73,34 @@ class LLM(Module):
             "retry_interval": provider.get("retry_interval", 10)
         }
 
-    def _make_sync_request(self, messages: List[Dict], params: Dict, stream: bool = False) -> Union[Dict, Generator]:
+    def make_sync_request(self, messages: List[Dict], params: Dict, stream: bool = False) -> Union[Dict, Generator]:
         """同步API请求核心逻辑"""
         parsed_url = urlparse(params["base_url"])
         is_https = parsed_url.scheme == "https"
-
         conn_class = http.client.HTTPSConnection if is_https else http.client.HTTPConnection
         conn = conn_class(parsed_url.netloc, timeout=params["timeout"])
 
-        # 准备请求头和数据
         headers = {
             "Content-Type": "application/json",
             "Authorization": f"Bearer {params['api_key']}",
             "Accept": "text/event-stream" if stream else "application/json"
         }
-
         body = {
             "model": params["model"],
             "messages": messages,
             "stream": stream
         }
-
         conn.request("POST", "/v1/chat/completions", body=json.dumps(body), headers=headers)
         response = conn.getresponse()
-
         if response.status != 200:
             raise http.client.HTTPException(f"API请求失败: {response.status} {response.reason}")
-
         if stream:
-            return self._handle_stream_response(response)
+            return self.handle_stream_response(response)
         else:
-            return json.loads(response.read().decode())
+            data = json.loads(response.read().decode())
+            return data["choices"][0]["message"]["content"]
 
-    def _handle_stream_response(self, response: http.client.HTTPResponse) -> Generator:
+    def handle_stream_response(self, response: http.client.HTTPResponse) -> Generator:
         """处理流式响应"""
         buffer = b""
         while True:
@@ -126,7 +121,7 @@ class LLM(Module):
                     except json.JSONDecodeError:
                         continue
 
-    async def _make_async_request(self, messages: List[Dict], params: Dict, stream: bool = False) -> Union[Dict, AsyncGenerator]:
+    async def make_async_request(self, messages: List[Dict], params: Dict, stream: bool = False) -> Union[Dict, AsyncGenerator]:
         """异步API请求核心逻辑"""
         if self.session is None:
             self.session = aiohttp.ClientSession()
@@ -136,13 +131,11 @@ class LLM(Module):
             "Authorization": f"Bearer {params['api_key']}",
             "Accept": "text/event-stream" if stream else "application/json"
         }
-
         body = {
             "model": params["model"],
             "messages": messages,
             "stream": stream
         }
-
         async with self.session.post(
             f"{params['base_url']}/v1/chat/completions",
             headers=headers,
@@ -154,11 +147,11 @@ class LLM(Module):
                 raise http.client.HTTPException(f"API请求失败: {response.status} {error}")
 
             if stream:
-                return self._handle_async_stream(response)
+                return self.handle_async_stream(response)
             else:
                 return await response.json()
 
-    async def _handle_async_stream(self, response: aiohttp.ClientResponse) -> AsyncGenerator:
+    async def handle_async_stream(self, response: aiohttp.ClientResponse) -> AsyncGenerator:
         """处理异步流式响应"""
         buffer = b""
         async for chunk in response.content.iter_any():
@@ -181,12 +174,16 @@ class LLM(Module):
         stream: bool = False
     ) -> Union[Dict, Generator]:
         """同步生成文本"""
-        messages: List[Dict] = [{"role": "user", "content": msg}]
-        system_prompt = self.config["system_prompt"]
-        if system_prompt:
-            messages = [{"role": "system", "content": self.config["system_prompt"]}, *messages]
-        params = self._get_request_params(model_name)
-        return self._make_sync_request(messages, params, stream)
+        try:
+            messages: List[Dict] = [{"role": "user", "content": msg}]
+            system_prompt = self.config["system_prompt"]
+            if system_prompt:
+                messages = [{"role": "system", "content": self.config["system_prompt"]}, *messages]
+            params = self.get_request_params(model_name)
+            return self.make_sync_request(messages, params, stream)
+        except Exception as e:
+            self.errorf(f"LLM请求失败: {e}")
+            return None
 
     async def async_llm_chat(
         self,
@@ -195,12 +192,16 @@ class LLM(Module):
         stream: bool = False
     ) -> Union[Dict, AsyncGenerator]:
         """异步生成文本"""
-        messages: List[Dict] = [{"role": "user", "content": msg}]
-        system_prompt = self.config["system_prompt"]
-        if system_prompt:
-            messages = [{"role": "system", "content": self.config["system_prompt"]}, *messages]
-        params = self._get_request_params(model_name)
-        return await self._make_async_request(messages, params, stream)
+        try:
+            messages: List[Dict] = [{"role": "user", "content": msg}]
+            system_prompt = self.config["system_prompt"]
+            if system_prompt:
+                messages = [{"role": "system", "content": self.config["system_prompt"]}, *messages]
+            params = self.get_request_params(model_name)
+            return await self.make_async_request(messages, params, stream)
+        except Exception as e:
+            self.errorf(f"LLM请求失败: {e}")
+            return None
 
     async def close(self):
         """异步关闭资源"""

@@ -250,7 +250,7 @@ class Chat(Module):
         """获取表情链接"""
         msg_id = self.match(r"^\s*\[CQ:reply,id=([^\]]+?)\]\s*$").group(1)
         reply_msg = get_msg(self.robot, msg_id)
-        msg = reply_msg["data"]["message"]
+        msg = reply_msg.get("data",{}).get("message","")
         if status_ok(reply_msg) and re.match(r"^\s*\[CQ:image,([^\]]+?)\]\s*$", msg):
             _, url = re.match(r"^\s*\[CQ:image,.*file=([^,\]]+?),.*url=([^,\]]+?),.*\]\s*$", msg).groups()
             msg = f"{url}"

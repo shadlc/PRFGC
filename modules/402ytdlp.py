@@ -120,7 +120,7 @@ class Ytdlp(Module):
         if not url_match:
             return
         self.success = True
-        video_path = ""
+        true_path = ""
         tasks = self.config[self.owner_id]["tasks"]
         url = url_match.group(1)
         opts = self.get_options(url)
@@ -165,8 +165,8 @@ class Ytdlp(Module):
             else:
                 set_emoji(self.robot, self.event.msg_id, 60)
             ext = self.config["ydl"]["merge_output_format"]
-            dir_path = Path(self.download_video(url, opts)).as_posix()
-            file_path = dir_path
+            true_path = Path(self.download_video(url, opts)).as_posix()
+            file_path = true_path
             if not os.path.exists(file_path):
                 file_path = f"{file_path}.{ext}"
             if not os.path.exists(file_path):
@@ -199,8 +199,8 @@ class Ytdlp(Module):
             nodes = self.node(f"{traceback.format_exc()}")
             return self.reply_forward(nodes, source="视频处理失败")
         finally:
-            if os.path.exists(video_path):
-                os.remove(video_path)
+            if os.path.exists(true_path):
+                os.remove(true_path)
 
     @via(
         lambda self: self.at_or_private() and self.au(1)
