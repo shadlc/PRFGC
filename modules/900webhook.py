@@ -75,8 +75,8 @@ class Webhook(Module):
     def receive_msg(self):
         try:
             header, body = listening(self.config["host"], self.config["port"])
-            if self.robot.config.is_debug and "application/json" not in header.get("Content-Type"):
-                self.warnf(f"收到一非JSON数据\n{body}")
+            if "application/json" not in header.get("Content-Type"):
+                self.warnf(f"收到一非JSON数据\n{body}", level="DEBUG")
                 return {}
             elif header.get("Transfer-Encoding") == "chunked":
                 body = body.split("\r\n", maxsplit=1)[1].strip()
@@ -110,8 +110,7 @@ class Webhook(Module):
             return
 
         self.printf(f"接收到一条类型为{msg_type}的外部请求")
-        if self.robot.config.is_debug:
-            self.warnf(f"{data}")
+        self.warnf(f"{data}", level="DEBUG")
 
         if self.msg_has_reported(data):
             self.warnf("此外部请求近期已经通报过，已忽略")

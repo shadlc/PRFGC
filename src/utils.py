@@ -262,9 +262,10 @@ def char_true_color(char: str, rgb: list):
     r, g, b = rgb
     return f"\033[38;2;{r};{g};{b}m{char}\033[0m"
 
-def msg_img2char(config: Config, msg: str, show_url = False):
+def msg_img2char(robot: "Concerto", msg: str, show_url = False):
     """
     检测CQ码中有图片并转化为字符画
+    :param robot: 机器人类
     :param msg: 收到的消息
     :param color: 是否渲染颜色
     :return: 转化为字符画的消息
@@ -278,7 +279,7 @@ def msg_img2char(config: Config, msg: str, show_url = False):
             img = Image.open(io.BytesIO(data.content)).convert("RGB")
             w, h = img.size
             ratio = h / float(w)
-            target_w = sorted([config.min_image_width, w, config.max_image_width])[1]
+            target_w = sorted([robot.config.min_image_width, w, robot.config.max_image_width])[1]
             target_h = int(target_w * ratio * 0.5)
             img = img.resize((target_w, target_h))
             pixels = img.getdata()
@@ -286,14 +287,14 @@ def msg_img2char(config: Config, msg: str, show_url = False):
             row = 0
             for i in pixels:
                 pixel_gray = (i[0] * 38 + i[1] * 75 + i[2] * 15) >> 7
-                if config.image_color == "colorama":
+                if robot.config.image_color == "colorama":
                     image_ascii = list(".,:;+*?#%@")
                     unit = (256 + 1) / len(image_ascii)
                     single_char = image_ascii[int(pixel_gray // unit)]
                     char += char_colorama(single_char, i)
-                elif config.image_color == "ansi_256":
+                elif robot.config.image_color == "ansi_256":
                     char += char_ansi_256("█", i)
-                elif config.image_color == "true_color":
+                elif robot.config.image_color == "true_color":
                     char += char_true_color("█", i)
                 else:
                     image_ascii = list(".,:;+*?#%@")
@@ -308,9 +309,7 @@ def msg_img2char(config: Config, msg: str, show_url = False):
                 char = f"{url}{char}"
             msg = msg.replace(cq, char)
         except Exception:
-            if config.is_debug:
-                traceback.print_exc()
-            return msg
+            robot.errorf(f"图片转字符画失败!\n{traceback.format_exc()}", level="DEBUG")
     return msg
 
 async def async_get_image_base64(robot : "Concerto", url: str, timeout: str=3, max_retries: str=3) -> str:
@@ -1185,7 +1184,7 @@ class Module:
         else:
             send_forward_msg(self.robot, nodes, user_id=self.event.user_id, source=source, summary=summary)
 
-    def printf(self, msg, end="\n", console=True, flush=False):
+    def printf(self, msg, end="\n", console=True, flush=False, level="INFO"):
         """
         向控制台输出通知级别的消息
         :param msg: 信息
@@ -1194,22 +1193,26 @@ class Module:
         """
         if not flush:
             msg = f"{Fore.CYAN}[{self.ID}]{Fore.RESET} {msg}"
-        self.robot.printf(msg=msg, end=end, console=console, flush=flush)
+        self.robot.printf(msg=msg, end=end, console=console, flush=flush, level=level)
 
-    def warnf(self, msg, end="\n", console=True):
+    def warnf(self, msg, end="\n", console=True, level="INFO"):
         """
         向控制台输出警告级别的消息
         :param msg: 信息
         :param end: 末尾字符
         :param console: 是否增加一行<console>
         """
-        self.robot.warnf(f"{Fore.CYAN}[{self.ID}]{Fore.YELLOW} {msg}", end=end, console=console)
+        if level == "DEBUG" and not self.robot.config.is_debug:
+            return
+        self.robot.warnf(f"{Fore.CYAN}[{self.ID}]{Fore.YELLOW} {msg}", end=end, console=console, level=level)
 
-    def errorf(self, msg, end="\n", console=True):
+    def errorf(self, msg, end="\n", console=True, level="INFO"):
         """
         向控制台输出错误级别的消息
         :param msg: 信息
         :param end: 末尾字符
         :param console: 是否增加一行<console>
         """
-        self.robot.errorf(f"{Fore.CYAN}[{self.ID}]{Fore.RED} {msg}", end=end, console=console)
+        if level == "DEBUG" and not self.robot.config.is_debug:
+            return
+        self.robot.errorf(f"{Fore.CYAN}[{self.ID}]{Fore.RED} {msg}", end=end, console=console, level=level)

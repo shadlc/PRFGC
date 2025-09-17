@@ -175,7 +175,7 @@ class Ytdlp(Module):
             file_size = os.path.getsize(file_path)
             self.printf(f"视频{video_name}下载完成，大小{calc_size(file_size)}")
             if file_size > 100 * 1024 * 1024:
-                return self.reply(f"视频{video_name}过大，上传失败，还是去APP观看吧~", reply=True)
+                return self.reply(f"视频{url}过大，上传失败，还是去APP观看吧~", reply=True)
             if not self.is_private():
                 set_emoji(self.robot, self.event.msg_id, 66)
             if video_path := self.config["video_path"]:
@@ -261,8 +261,7 @@ class Ytdlp(Module):
             with urllib.request.urlopen(req) as response:
                 url = response.url
         except Exception as e:
-            if self.robot.config.is_debug:
-                self.warnf(f"获取重定向url失败! {e}")
+            self.warnf(f"获取重定向url失败! {e}", level="DEBUG")
         info = {}
         for attempt in range(1, max_retries + 1):
             try:

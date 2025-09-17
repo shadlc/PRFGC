@@ -353,17 +353,19 @@ class Concerto:
             self.modules[module.ID] = module
             self.printf(f"{Fore.CYAN}[{module.ID}] {Fore.RESET}{module.NAME}({module_file})已接入！")
 
-    def printf(self, msg, end="\n", console=True, flush=False):
+    def printf(self, msg, end="\n", console=True, flush=False, level="INFO"):
         """
         向控制台输出通知级别的消息
         :param msg: 信息
         :param end: 末尾字符
         :param console: 是否增加一行<console>
         """
+        if level == "DEBUG" and not self.config.is_debug:
+            return
         msg = handle_placeholder(str(msg), self.placeholder_dict)
         prefix = f"\r[{time.strftime("%H:%M:%S", time.localtime())} INFO] "
         if self.config.is_show_image:
-            msg = msg_img2char(self.config, msg)
+            msg = msg_img2char(self, msg)
         if flush:
             print(msg, end=end,flush=flush)
         else:
@@ -372,13 +374,15 @@ class Concerto:
             print(f"\r{Fore.GREEN}<console> {Fore.RESET}", end="")
         logger.info("%s", format_to_log(f"{prefix}{msg}"))
 
-    def warnf(self, msg, end="\n", console=True):
+    def warnf(self, msg, end="\n", console=True, level="INFO"):
         """
         向控制台输出警告级别的消息
         :param msg: 信息
         :param end: 末尾字符
         :param console: 是否增加一行<console>
         """
+        if level == "DEBUG" and not self.config.is_debug:
+            return
         msg = handle_placeholder(str(msg), self.placeholder_dict)
         msg = msg.replace(Fore.RESET, Fore.YELLOW)
         prefix = f"\r[{time.strftime("%H:%M:%S", time.localtime())} WARN] "
@@ -388,13 +392,15 @@ class Concerto:
         if console:
             print(f"\r{Fore.GREEN}<console> {Fore.RESET}", end="")
 
-    def errorf(self, msg, end="\n", console=True):
+    def errorf(self, msg, end="\n", console=True, level="INFO"):
         """
         向控制台输出错误级别的消息
         :param msg: 信息
         :param end: 末尾字符
         :param console: 是否增加一行<console>
         """
+        if level == "DEBUG" and not self.config.is_debug:
+            return
         msg = handle_placeholder(str(msg), self.placeholder_dict)
         prefix = f"\r[{time.strftime("%H:%M:%S", time.localtime())} ERROR] "
         msg = f"{Fore.RED}{prefix}{msg}{Fore.RESET}"

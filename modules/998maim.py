@@ -560,8 +560,7 @@ class Maim(Module):
         Returns:
             str: Base64编码的GIF图片数据
         """
-        if self.robot.config.is_debug:
-            self.warnf("转换图片为GIF格式")
+        self.warnf("转换图片为GIF格式", level="DEBUG")
         try:
             image_bytes = base64.b64decode(image_base64)
             image = Image.open(io.BytesIO(image_bytes))
