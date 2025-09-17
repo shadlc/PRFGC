@@ -186,6 +186,7 @@ class Bilibili(Module):
                     "avatar": avatar,
                     "fans": fans,
                     "keyword": "",
+                    "anti_keyword": "",
                     "dynamic_notice": True,
                     "live_notice": True,
                     "fans_notice": False,
@@ -218,19 +219,23 @@ class Bilibili(Module):
             msg = "查无此人"
         self.reply(msg)
 
-    @via(lambda self: self.at_or_private() and self.au(2) and self.match(r"^(\S+)\s?通知关键词\s+(\S+)?$"))
+    @via(lambda self: self.at_or_private() and self.au(2) and self.match(r"^(\S+)\s?反?向?通知关键词\s+(\S+)?$"))
     async def set_keywords(self):
         """设置通知关键词"""
-        user_match, pattern = self.match(r"^(\S+)\s?通知关键词\s+(\S+)$").groups()
+        user_match, pattern = self.match(r"^(\S+)\s?反?向?通知关键词\s+(\S+)$").groups()
         info = await self.get_info(user_match)
         if info:
             uid = info["uid"]
             name = info["name"]
             if uid in self.config[self.owner_id]["sub"]:
-                self.config[self.owner_id]["sub"][uid]["keyword"] = pattern
+                if self.match("反向通知关键词"):
+                    self.config[self.owner_id]["sub"][uid]["anti_keyword"] = pattern
+                    msg = f"已成功为{name}设置反向匹配关键词【{pattern}】"
+                else:
+                    self.config[self.owner_id]["sub"][uid]["keyword"] = pattern
+                    msg = f"已成功为{name}设置正则匹配关键词【{pattern}】"
                 self.robot.persist_mods[self.ID].config = self.config.copy()
                 self.save_config()
-                msg = f"已成功为{name}设置正则匹配关键词【{pattern}】"
             else:
                 msg = "未关注该UP主，请先关注！"
         else:
@@ -534,6 +539,9 @@ class Bilibili(Module):
                         for owner_id in notice_list:
                             pattern = self.config[owner_id]["sub"][uid].get("keyword")
                             if pattern and re.search(pattern, msg):
+                                anti_pattern = self.config[owner_id]["sub"][uid].get("anti_keyword")
+                                if anti_pattern and re.search(anti_pattern, msg):
+                                    continue
                                 self.reply_back(owner_id, msg)
                                 await asyncio.sleep(3)
                         continue
@@ -555,6 +563,9 @@ class Bilibili(Module):
                 for owner_id in notice_list:
                     pattern = self.config[owner_id]["sub"][uid].get("keyword")
                     if pattern == "" or re.search(pattern, msg):
+                        anti_pattern = self.config[owner_id]["sub"][uid].get("anti_keyword")
+                        if anti_pattern and re.search(anti_pattern, msg):
+                            continue
                         self.reply_forward_back(owner_id, nodes, title)
                         await asyncio.sleep(3)
                 await asyncio.sleep(3)
