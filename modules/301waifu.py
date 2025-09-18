@@ -44,7 +44,7 @@ class Waifu(Module):
         return self.group_at() or self.config[self.owner_id].get("enable")
 
     @via(lambda self: self.group_at() and self.au(1) and self.match(r"^(开启|打开|启用|允许|关闭|禁止|不允许|取消)?抽老婆$"))
-    def setting(self):
+    def toggle(self):
         """设置抽老婆"""
         flag = self.config[self.owner_id]["repeat"]
         text = "开启" if self.config[self.owner_id]["repeat"] else "关闭"

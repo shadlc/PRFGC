@@ -355,7 +355,7 @@ class Bilibili(Module):
         self.reply(msg)
 
     @via(lambda self: self.at_or_private() and self.au(2) and self.match(r"^(开启|关闭)[b|B|哔]站通知$"))
-    def enable(self):
+    def toggle(self):
         """通知控制"""
         flag = self.match(r"(开启|关闭)").group(1)
         status = flag == "开启"

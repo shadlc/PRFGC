@@ -11,7 +11,7 @@ import traceback
 import urllib
 from yt_dlp import YoutubeDL, DownloadError
 
-from src.utils import Module, calc_size, calc_time, format_to_log, get_forward_msg, get_image_base64, get_msg, set_emoji, status_ok, via
+from src.utils import Module, calc_size, calc_time, format_to_log, get_image_base64, get_msg, set_emoji, status_ok, via
 
 class Ytdlp(Module):
     """视频下载模块"""
@@ -51,7 +51,8 @@ class Ytdlp(Module):
     }
 
     def __init__(self, event, auth = 0):
-        self.video_pattern = r"(https?://[^\s@&;,\"]*(b23.tv|bilibili.com/video|youtu.be|youtube.com|v.qq.com|douyin.com|tiktok.com)[^\s@&;,\"]*)"
+        # self.video_pattern = r"(https?://[^\s@&;,\"]*(b23.tv|bilibili.com/video|youtu.be|youtube.com|v.qq.com|douyin.com|tiktok.com)[^\s@&;,\"]*)"
+        self.video_pattern = r"(https?://[^\s@&;,\"]*(b23.tv|bilibili.com/video|youtu.be|youtube.com|v.qq.com)[^\s@&;,\"]*)"
         super().__init__(event, auth)
 
     @via(lambda self: self.at_or_private() and self.au(2)
@@ -129,7 +130,7 @@ class Ytdlp(Module):
                 set_emoji(self.robot, self.event.msg_id, 124)
             info = self.get_info(url, opts)
             if not info:
-                return self.reply("无效视频链接!", reply=True)
+                return self.reply("不支持的视频链接!", reply=True)
             elif info.get("type") == "playlist" and ("bilibili.com" in url or "b23.tv" in url):
                 url = info["url"] + "?p=1"
             elif info.get("type") == "playlist":
@@ -206,7 +207,7 @@ class Ytdlp(Module):
         lambda self: self.at_or_private() and self.au(1)
         and self.match(r"^(开启|启用|打开|记录|启动|关闭|禁用|取消)视频(解析|下载)?(功能)?$")
     )
-    def enable(self):
+    def toggle(self):
         """启用视频模块功能"""
         msg = ""
         if self.match(r"(开启|启用|打开|记录|启动)"):

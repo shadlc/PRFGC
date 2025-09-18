@@ -390,7 +390,7 @@ def build_node(*args, **kwargs):
     """
     content = args[0] if len(args) == 1 else list(args)
     user_id = kwargs.get("user_id", "0")
-    nickname = None if kwargs.get("user_id") else kwargs.get("nickname", " ")
+    nickname = kwargs.get("nickname")
     data = {
             "type": "node",
             "data": {
@@ -1118,7 +1118,7 @@ class Module:
             self.owner_id = f"u{self.robot.self_id}"
         # 读取指定会话的数据与配置文件
         self.data = self.robot.data.get(self.owner_id)
-        if self.GLOBAL_CONFIG is None:
+        if self.GLOBAL_CONFIG is None and self.CONV_CONFIG is None:
             return
         config_name = self.CONFIG
         if config_name is None:

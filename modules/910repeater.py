@@ -58,7 +58,7 @@ class Repeater(Module):
                 self.printf(f"本次概率{f"{round(chance*100,2)}%"}, 复读失败")
 
     @via(lambda self: self.group_at() and self.au(1) and self.match(r"^(开启|打开|启用|允许|关闭|禁止|不允许|取消)?复读机$"))
-    def setting(self):
+    def toggle(self):
         """设置复读机"""
         flag = self.config[self.owner_id]["repeat"]
         text = "开启" if self.config[self.owner_id]["repeat"] else "关闭"
