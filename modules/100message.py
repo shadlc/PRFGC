@@ -5,7 +5,7 @@ import time
 from colorama import Fore
 import httpx
 from src.api import del_msg, get_version_info, send_msg
-from src.utils import Module, get_group_name, get_user_name, status_ok, via, build_node
+from src.utils import Module, get_group_name, get_user_name, status_ok, via
 
 
 class Message(Module):
@@ -33,11 +33,6 @@ class Message(Module):
             "计时 [数字] | 进行异步计时",
         ]
     }
-    CONFIG = "data.json"
-    GLOBAL_CONFIG = {
-        "ip_test_token": ""
-    }
-    CONV_CONFIG = None
 
     @via(lambda self: self.at_or_private() and self.au(3) and self.match(r"^帮助\d?$"))
     def help(self):
@@ -235,24 +230,20 @@ class Message(Module):
             raise RuntimeError("测试错误")
         elif self.match(r"^测试(ip|IP)\s(\S*)"):
             ip = self.match(r"^测试(ip|IP)\s(\S*)").group(2)
-            headers = {
-                "Content-Type": "application/json;charset=UTF-8",
-                "token": self.config.get("ip_test_token",""),
-            }
-            url = f"https://api.ip138.com/ip/?ip={ip}"
+            url = f"https://api.pearktrue.cn/api/ip/high/?ip={ip}"
             msg = ""
             try:
-                data = httpx.Client().get(url, headers=headers, timeout=10).json()
-                if data.get("ret") != "ok":
-                    msg = f"ip138.com返回为空: {data.get("msg")}"
+                data = httpx.Client().get(url, timeout=3).json()
+                if data.get("code") != 200:
+                    msg = f"IP查询返回失败: {data.get("msg")}"
                 else:
                     ip = data.get("ip")
-                    location = data.get("data")
-                    msg = f"IP地址: {ip}\n地区: {" ".join([i for i in location[:-4]])}\n归属: {location[-3]}\n邮编: {location[-2]}\n区号: {location[-1]}"
+                    address = data.get("data").get("address")
+                    msg = f"IP: {ip}\n地址: {address}"
             except httpx.DecodingError as e:
                 msg = f"返回解析错误！{e}"
             except httpx.ConnectError as e:
-                msg = f"ip138.com服务器请求错误！{e}"
+                msg = f"服务器请求错误！{e}"
         else:
             thing = self.match(r"^测试(.*)").group(1)
             msg = f"测试{thing}OK!"

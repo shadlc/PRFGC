@@ -105,15 +105,10 @@ class Maim(Module):
         """处理 MaiMBot 回复的消息"""
         try:
             message: MessageBase = MessageBase.from_dict(raw_message)
-            simple_msg = ""
-            if self.robot.config.is_debug:
-                simple_msg = str(raw_message)
-            else:
-                simple_msg = str(message.message_segment)
             simple_msg = re.sub(
                 r"type='(image|emoji)',\s?data='.*?'",
                 r"type='\1', data='Base64File'",
-                simple_msg
+                str(message.message_segment)
             )
             self.printf(f"{Fore.CYAN}[FROM] {Fore.RESET}{simple_msg}")
             message_segment: Seg = message.message_segment
@@ -486,12 +481,11 @@ class Maim(Module):
                 raise RuntimeError("路由未正确配置或连接异常")
             self.robot.persist_mods[self.ID].error_times = 0
             return send_status
-        except Exception as e:
+        except Exception:
             self.robot.persist_mods[self.ID].error_times += 1
             self.error_times = self.robot.persist_mods[self.ID].error_times
             if self.error_times == 3:
                 self.errorf(f"请检查与MaiMBot之间的连接, 发送消息失败: {traceback.format_exc()}")
-                raise RuntimeError("麦麦机器人连接异常!") from e
             if self.error_times > 3:
                 self.errorf("发送消息至MaiMBot失败")
             if 1 <= self.error_times and self.error_times <= 3:
@@ -506,7 +500,7 @@ class Maim(Module):
                     self.errorf(traceback.format_exc())
                 self.listening()
 
-    async def construct_message(self) -> MessageBase:
+    async def construct_message(self) -> MessageBase | None:
         """根据平台事件构造标准 MessageBase"""
         user_info = UserInfo(
             platform=self.config["platform"],
@@ -545,6 +539,8 @@ class Maim(Module):
             format_info=format_info,
         )
         seg_message: List[Seg] = await self.handle_msg(self.event.raw)
+        if len(seg_message) == 0:
+            return None
         message_segment = Seg(type="seglist", data=seg_message)
         return MessageBase(
             message_info=message_info,
@@ -614,8 +610,8 @@ class Maim(Module):
     def send_maimbot(self):
         """发送至麦麦"""
         async def send_msg_task():
-            msg = await self.construct_message()
-            await self.send_to_maim(msg)
+            if msg := await self.construct_message():
+                await self.send_to_maim(msg)
         self.loop.call_soon_threadsafe(
             lambda: asyncio.create_task(send_msg_task())
         )

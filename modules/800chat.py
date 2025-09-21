@@ -234,7 +234,7 @@ class Chat(Module):
         if messages := self.robot.data.get("latest_recall",{}).get(self.owner_id):
             nodes = []
             for msg in messages:
-                if msg.get("time") and time.time() - msg.get("time") > 3600:
+                if msg.get("time") and time.time() - msg.get("time") > 1200:
                     continue
                 user_id = msg.get("user_id")
                 nickname = msg.get("sender",{}).get("nickname","")
