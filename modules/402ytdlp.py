@@ -11,7 +11,7 @@ import traceback
 import urllib
 from yt_dlp import YoutubeDL, DownloadError
 
-from src.utils import Module, calc_size, calc_time, format_to_log, get_image_base64, get_msg, set_emoji, status_ok, via
+from src.utils import Module, calc_size, calc_time, format_to_log, get_image_base64, set_emoji, via
 
 class Ytdlp(Module):
     """视频下载模块"""
@@ -57,29 +57,20 @@ class Ytdlp(Module):
 
     @via(lambda self: self.at_or_private() and self.au(2)
             and self.config[self.owner_id]["enable"]
-            and (self.match(r"\[CQ:reply,id=([^\]]+?)\]")
-            or self.match("视频详情")), success=False)
-    def info(self):
+            and (self.is_reply() or self.match("视频详情")), success=False)
+    def video_info(self):
         """获取视频详情"""
-        url_match = self.match(rf"^视?频?详?情?\s?({self.video_pattern})\s?视?频?详?情?$")
-        reply_match = self.match(r"\[CQ:reply,id=([^\]]+?)\]")
         url = ""
-        if reply_match:
-            msg_id = reply_match.group(1)
-            reply_msg = get_msg(self.robot, msg_id)
-            msg = reply_msg["data"]["message"].replace("\\", "")
-            if not status_ok(reply_msg):
-                return
-            if "视频详情" not in msg and "视频详情" not in self.event.msg:
-                return
-            if re.search(self.video_pattern, msg):
-                url_match = re.search(self.video_pattern, msg)
+        if match := self.match(self.video_pattern):
+            url = match.group(1)
+        elif msg := self.get_reply():
+            if match := re.search(self.video_pattern, msg):
+                url = match.group(1)
+        if url == "":
+            return
         elif not self.match("视频详情"):
             return
-        if not url_match:
-            return
         self.success = True
-        url = url_match.group(1)
         opts = self.get_options(url)
         try:
             set_emoji(self.robot, self.event.msg_id, 124)
@@ -99,31 +90,22 @@ class Ytdlp(Module):
 
     @via(lambda self: self.at_or_private() and self.au(2)
             and self.config[self.owner_id]["enable"]
-            and (self.match(r"\[CQ:reply,id=([^\]]+?)\]")
-            or self.match(rf"(【.*】\s)?{self.video_pattern}")), success=False)
-    def download(self):
+            and (self.is_reply() or self.match(rf"(【.*】\s)?{self.video_pattern}")), success=False)
+    def video_download(self):
         """下载视频"""
-        url_match = self.match(rf"({self.video_pattern})")
-        reply_match = self.match(r"\[CQ:reply,id=([^\]]+?)\]")
         url = ""
-        if reply_match:
-            msg_id = reply_match.group(1)
-            reply_msg = get_msg(self.robot, msg_id)
-            if not status_ok(reply_msg):
-                return
-            msg = reply_msg["data"]["message"].replace("\\", "")
-            if "视频详情" in msg or "视频详情" in self.event.msg:
-                return
-            if re.search(self.video_pattern, msg):
-                url_match = re.search(self.video_pattern, msg)
-        elif self.match("视频详情"):
+        if match := self.match(self.video_pattern):
+            url = match.group(1)
+        elif msg := self.get_reply():
+            if match := re.search(self.video_pattern, msg):
+                url = match.group(1)
+        if url == "":
             return
-        if not url_match:
+        elif self.match("视频详情"):
             return
         self.success = True
         true_path = ""
         tasks = self.config[self.owner_id]["tasks"]
-        url = url_match.group(1)
         opts = self.get_options(url)
         try:
             if not self.is_private():
@@ -176,7 +158,7 @@ class Ytdlp(Module):
             file_size = os.path.getsize(file_path)
             self.printf(f"视频{video_name}下载完成，大小{calc_size(file_size)}")
             if file_size > 100 * 1024 * 1024:
-                return self.reply(f"视频{url}过大，上传失败，还是去APP观看吧~", reply=True)
+                return self.reply(f"视频{url}过大({calc_size(file_size)})，上传失败，还是去APP观看吧~", reply=True)
             if not self.is_private():
                 set_emoji(self.robot, self.event.msg_id, 66)
             if video_path := self.config["video_path"]:

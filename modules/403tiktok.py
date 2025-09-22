@@ -5,7 +5,7 @@ import traceback
 
 import httpx
 
-from src.utils import Module, get_msg, set_emoji, status_ok, via
+from src.utils import Module, set_emoji, via
 
 class Tiktok(Module):
     """抖音视频模块"""
@@ -23,24 +23,17 @@ class Tiktok(Module):
         super().__init__(event, auth)
 
     @via(lambda self: self.at_or_private() and self.au(2)
-            and (self.match(r"\[CQ:reply,id=([^\]]+?)\]")
-            or self.match(self.video_pattern)), success=False)
-    def download(self):
+            and (self.is_reply() or self.match(self.video_pattern)), success=False)
+    def tiktok_download(self):
         """下载视频"""
-        url_match = self.match(rf"({self.video_pattern})")
-        reply_match = self.match(r"\[CQ:reply,id=([^\]]+?)\]")
         url = ""
-        if reply_match:
-            msg_id = reply_match.group(1)
-            reply_msg = get_msg(self.robot, msg_id)
-            if not status_ok(reply_msg):
-                return
-            msg = reply_msg["data"]["message"].replace("\\", "")
-            if re.search(self.video_pattern, msg):
-                url_match = re.search(self.video_pattern, msg)
-        if not url_match:
+        if match := self.match(rf"({self.video_pattern})"):
+            url = match.group(1)
+        elif msg := self.get_reply():
+            if match := re.search(rf"({self.video_pattern})", msg):
+                url = match.group(1)
+        if url == "":
             return
-        url = url_match.group(1)
         self.success = True
         try:
             if not self.is_private():

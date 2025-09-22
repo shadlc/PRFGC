@@ -41,11 +41,12 @@ class Chat(Module):
             "成员列表 | 查看曾有称号记录在案的成员列表和称号",
             "[QQ账号或昵称]曾说过: | 假装有人说过",
             "刚刚撤回了什么 | 查看上一个撤回消息内容",
-            "回复表情图片并@机器人(空内容) | 将表情包转化为链接",
+            "回复表情图片并@机器人(空内容) | 将表情包转化为链接"
         ],
         1: [
             "(打开|关闭)词云 | 打开或关闭词云记录(默认关闭)",
             "词云配色 [配色代码] | 更改词云配色",
+            "一键发电 | 对回复的消息进行大量的正面贴表情",
         ],
     }
     GLOBAL_CONFIG = {
@@ -212,7 +213,8 @@ class Chat(Module):
         msg_list = []
         for said in msg_said:
             name = re.sub(r"曾?经?又?还?也?$", "", said[0])
-            content = said[-1]
+            # 防止某些图片发不出来
+            content = re.sub(r",sub_type=\d", "", said[-1])
             uid = self.get_uid(name)
             if uid in self.config[self.owner_id]["users"]:
                 name = self.config[self.owner_id]["users"][uid]["nickname"]
@@ -298,6 +300,17 @@ class Chat(Module):
             msg += f"\n称号: {label}"
             msg += "\n======================="
         self.reply(msg)
+
+    @via(lambda self: self.group_at() and self.au(1)
+         and self.match("一键发电") and self.is_reply())
+    def praise(self):
+        """一键发电"""
+        reply_match = self.is_reply()
+        msg_id = reply_match.group(1)
+        emoji_list = [2, 6, 18, 63, 66, 76, 109, 116, 144, 175, 305, 311, 318, 319, 320, 350, 337, 339, 424, 426]
+        for emoji in emoji_list:
+            set_emoji(self.robot, msg_id, emoji)
+            time.sleep(0.1)
 
     @via(lambda self: self.event.user_id not in self.config[self.owner_id]["users"]
          or self.event.user_name != self.config[self.owner_id]["users"].get(self.event.user_id,{}).get("nickname",""), success=False)

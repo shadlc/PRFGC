@@ -3,9 +3,8 @@ import json
 import random
 import datetime
 import sqlite3
-import os
 import re
-from src.utils import Module, build_node, via, get_user_name
+from src.utils import Module, via, get_user_name
 
 class RPG(Module):
     """跑团功能模块"""

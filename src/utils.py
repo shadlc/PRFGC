@@ -23,7 +23,6 @@ import httpx
 from PIL import Image
 from colorama import Fore, Style
 
-from src.config import Config
 from src import api
 
 if TYPE_CHECKING:
@@ -389,8 +388,10 @@ def build_node(*args, **kwargs):
     user_id,nickname,content
     """
     content = args[0] if len(args) == 1 else list(args)
-    user_id = kwargs.get("user_id", "0")
+    user_id = kwargs.get("user_id")
     nickname = kwargs.get("nickname")
+    if user_id  is None and nickname is None:
+        nickname = " "
     data = {
             "type": "node",
             "data": {
@@ -424,7 +425,7 @@ def reply_event(robot: "Concerto", event: "Event", msg: str, reply=False, force=
     msg = handle_placeholder(str(msg), robot.placeholder_dict)
     if reply:
         msg = f"[CQ:reply,id={event.msg_id}]{msg}"
-    simple_msg = re.sub(r"\[CQ:(.*?),file=base64.*\]", r"[CQ:\1,file=Base64]", msg)
+    simple_msg = re.sub(r"\[CQ:(.*?),(file|url)=base64.*\]", r"[CQ:\1,\2=Base64]", msg)
     if event.post_type == "message" and (not robot.config.is_silence or force):
         if event.msg_type == "group":
             group_id = event.group_id
@@ -1107,6 +1108,10 @@ class Module:
         """是否私聊"""
         return self.event.group_id == ""
 
+    def is_reply(self):
+        """是否包含回复消息"""
+        return self.match(r"\[CQ:reply,id=([^\]]+?)\]")
+
     def init_config(self):
         """初始化模块数据"""
         # 设定会话的owner_id
@@ -1183,6 +1188,18 @@ class Module:
             send_forward_msg(self.robot, nodes, group_id=self.event.group_id, source=source, summary=summary)
         else:
             send_forward_msg(self.robot, nodes, user_id=self.event.user_id, source=source, summary=summary)
+
+    def get_reply(self, ) -> str | None:
+        """读取可能存在的回复消息"""
+        reply_match = self.is_reply()
+        if not reply_match:
+            return
+        msg_id = reply_match.group(1)
+        reply_msg = get_msg(self.robot, msg_id)
+        if not status_ok(reply_msg):
+            return
+        msg = re.sub(r"[\\\s]", "", reply_msg["data"]["message"])
+        return msg
 
     def printf(self, msg, end="\n", console=True, flush=False, level="INFO"):
         """
