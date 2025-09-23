@@ -4,7 +4,6 @@ import asyncio
 import base64
 import random
 import re
-import threading
 import time
 import traceback
 
@@ -72,8 +71,7 @@ class Bilibili(Module):
         self.live_status = {}
         self.dynamics = {}
         self.browser = None
-        self.loop = asyncio.new_event_loop()
-        threading.Thread(target=self.start_loop, daemon=True, name=self.NAME).start()
+        asyncio.run_coroutine_threadsafe(self.init_task(), self.robot.loop)
 
     def premise(self):
         self.credential = Credential(
@@ -89,18 +87,11 @@ class Bilibili(Module):
             self.live_status = bilibili.live_status
             self.dynamics = bilibili.dynamics
             self.browser = bilibili.browser
-            self.loop = bilibili.loop
         return super().premise()
 
-    def start_loop(self):
-        """开始事件循环"""
-        asyncio.set_event_loop(self.loop)
-        self.init_task()
-        self.loop.run_forever()
-
-    def init_task(self, interval=20):
+    async def init_task(self, interval=20):
         """初始化任务"""
-        time.sleep(10)
+        await asyncio.sleep(10)
         dynamic = len(self.get_uid_list("dynamic"))
         live = len(self.get_uid_list("live"))
         fans = len(self.get_uid_list("fans"))
@@ -112,7 +103,7 @@ class Bilibili(Module):
                 except Exception:
                     self.warnf(f"动态轮询异常!\n{traceback.format_exc()}")
                 await asyncio.sleep(interval)
-        asyncio.run_coroutine_threadsafe(dynamic_loop(), self.loop)
+        asyncio.run_coroutine_threadsafe(dynamic_loop(), self.robot.loop)
         async def fans_loop():
             cron = MiniCron(self.config["env"]["cron"], lambda: sync(self.fans_check()))
             while True:
@@ -121,7 +112,7 @@ class Bilibili(Module):
                 except Exception:
                     self.warnf(f"粉丝数轮询异常!\n{traceback.format_exc()}")
                 await asyncio.sleep(interval)
-        asyncio.run_coroutine_threadsafe(fans_loop(), self.loop)
+        asyncio.run_coroutine_threadsafe(fans_loop(), self.robot.loop)
         async def live_loop():
             while True:
                 try:
@@ -129,7 +120,7 @@ class Bilibili(Module):
                 except Exception:
                     self.warnf(f"直播轮询异常!\n{traceback.format_exc()}")
                 await asyncio.sleep(interval)
-        asyncio.run_coroutine_threadsafe(live_loop(), self.loop)
+        asyncio.run_coroutine_threadsafe(live_loop(), self.robot.loop)
         async def credential_refresh():
             while True:
                 if await self.credential.check_refresh():
@@ -143,7 +134,7 @@ class Bilibili(Module):
                     self.robot.persist_mods[self.ID].config = self.config.copy()
                     self.save_config()
                 await asyncio.sleep(interval * 1000)
-        asyncio.run_coroutine_threadsafe(credential_refresh(), self.loop)
+        asyncio.run_coroutine_threadsafe(credential_refresh(), self.robot.loop)
 
     @via(lambda self: self.at_or_private() and self.au(3) and self.match(r"^关注列表$"))
     async def show_follow_list(self):

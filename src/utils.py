@@ -169,7 +169,7 @@ def apply_formatter(logger: logging.Logger, mid: str):
 
 def calc_time(sec: int) -> str:
     """格式化时间"""
-    units = [("天", 86400), ("小时", 3600), ("分钟", 60), ("秒", 1)]
+    units = [("天", 86400), ("小时", 3600), ("分", 60), ("秒", 1)]
     parts = []
     for name, div in units:
         if sec >= div:
@@ -310,6 +310,23 @@ def msg_img2char(robot: "Concerto", msg: str, show_url = False):
         except Exception:
             robot.errorf(f"图片转字符画失败!\n{traceback.format_exc()}", level="DEBUG")
     return msg
+
+def resize_image(image: bytes, size=(640, 360), format: str = "JPEG") -> bytes:
+    """
+    缩放图片
+    :param img: 原始图片
+    :param size: 目标大小，默认(640, 360)
+    :return: 输出图片
+    """
+    with Image.open(io.BytesIO(image)).convert("RGB") as img:
+        img.thumbnail((size[0], size[1]))
+        new_img = Image.new("RGB", size, (0, 0, 0))
+        offset_x = (size[0] - img.width) // 2
+        offset_y = (size[1] - img.height) // 2
+        new_img.paste(img, (offset_x, offset_y))
+    buf = io.BytesIO()
+    new_img.save(buf, format=format)
+    return buf.getvalue()
 
 async def async_get_image_base64(robot : "Concerto", url: str, timeout: str=3, max_retries: str=3) -> str:
     """获取图片的Base64"""
@@ -919,51 +936,73 @@ def via(condition, success=True):
     return decorator
 
 class MiniCron:
-    """简单的Crontab""" 
+    """简单Crontab""" 
     def __init__(self, expr: str, task: Callable[[], None]) -> None:
         """
-        expr: crontab 表达式 (如 "0 8 * * *")
+        expr: crontab 表达式 (如 "0 8-12/1 * * *" 表示8点到12点每小时执行)
         task: 要执行的函数，无参数，无返回值
         """
         self.expr: str = expr
         self.task: Callable[[], None] = task
-        self.cron_fields: Dict[str, Set[int]] = self._parse_cron(expr)
+        self.cron_fields: Dict[str, Set[int]] = self.parse_cron(expr)
 
-    def _parse_field(self, field: str, min_val: int, max_val: int) -> Set[int]:
+    def parse_field(self, field: str, min_val: int, max_val: int) -> Set[int]:
         """解析单个字段，返回允许的整数集合"""
         if field == "*":
             return set(range(min_val, max_val + 1))
+
         values: Set[int] = set()
-        for part in field.split(","):
-            if part.startswith("*/"):  # */n
-                step = int(part[2:])
+
+        # 处理步长表达式 (如 8-12/1)
+        if "/" in field:
+            range_part, step_part = field.split("/", 1)
+            step = int(step_part)
+
+            if range_part == "*":
+                # */n 格式
                 values.update(range(min_val, max_val + 1, step))
-            elif "-" in part:
-                start, end = map(int, part.split("-"))
-                values.update(range(start, end + 1))
+            elif "-" in range_part:
+                # start-end/step 格式 (如 8-12/1)
+                start_str, end_str = range_part.split("-")
+                start = int(start_str)
+                end = int(end_str)
+                values.update(range(start, end + 1, step))
             else:
-                values.add(int(part))
+                # 单个值/step 格式
+                base = int(range_part)
+                values.update(range(base, max_val + 1, step))
+        else:
+            # 没有步长的普通处理
+            for part in field.split(","):
+                if "-" in part:
+                    start, end = map(int, part.split("-"))
+                    values.update(range(start, end + 1))
+                else:
+                    values.add(int(part))
+
         return values
 
-    def _parse_cron(self, expr: str) -> Dict[str, Set[int]]:
+    def parse_cron(self, expr: str) -> Dict[str, Set[int]]:
         """解析 cron 表达式，返回每个字段允许的整数集合"""
         minute, hour, day, month, weekday = expr.split()
         return {
-            "minute": self._parse_field(minute, 0, 59),
-            "hour": self._parse_field(hour, 0, 23),
-            "day": self._parse_field(day, 1, 31),
-            "month": self._parse_field(month, 1, 12),
-            "weekday": self._parse_field(weekday, 0, 6),  # 0=周一 … 6=周日
+            "minute": self.parse_field(minute, 0, 59),
+            "hour": self.parse_field(hour, 0, 23),
+            "day": self.parse_field(day, 1, 31),
+            "month": self.parse_field(month, 1, 12),
+            "weekday": self.parse_field(weekday, 0, 6),  # 0=周日 … 6=周六
         }
 
-    def _next_time(self, from_time: Optional[datetime] = None) -> datetime:
+    def next_time(self, from_time: Optional[datetime] = None) -> datetime:
         """计算下一个匹配 cron 表达式的时间点"""
         if from_time is None:
             from_time = datetime.now().replace(second=0, microsecond=0) + timedelta(minutes=1)
         else:
             from_time = from_time.replace(second=0, microsecond=0) + timedelta(minutes=1)
-
-        while True:
+        max_attempts = 100000  # 防止无限循环
+        attempts = 0
+        while attempts < max_attempts:
+            attempts += 1
             if (from_time.minute in self.cron_fields["minute"] and
                 from_time.hour in self.cron_fields["hour"] and
                 from_time.day in self.cron_fields["day"] and
@@ -971,17 +1010,19 @@ class MiniCron:
                 from_time.weekday() in self.cron_fields["weekday"]):
                 return from_time
             from_time += timedelta(minutes=1)
+        raise ValueError("无法找到下一个执行时间, 请检查cron表达式")
 
     async def run(self) -> None:
         """开始循环执行任务"""
-        next_run: datetime = self._next_time()
+        next_run: datetime = self.next_time()
         while True:
             now: datetime = datetime.now()
-            if now >= next_run:
-                self.task()
-                next_run = self._next_time(now)
-            else:
-                await asyncio.sleep((next_run - now).total_seconds())
+            sleep_seconds = (next_run - now).total_seconds()
+            if sleep_seconds > 0:
+                await asyncio.sleep(sleep_seconds)
+            self.task()
+            # 计算下一次执行时间
+            next_run = self.next_time(datetime.now())
 
 class Event:
     """基础事件结构"""  

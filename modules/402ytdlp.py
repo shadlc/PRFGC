@@ -139,8 +139,16 @@ class Ytdlp(Module):
                 msg = f"视频大于十分钟,仅能使用最低分辨率下载，正在解析{name}，请耐心等待"
                 self.reply(msg, reply=True)
                 opts["format"] = "wv+ba/w"
+            elif info["site"] == "youtube" and info["duration"] > 300:
+                opts["format"] = "bv[height<=700]+ba/b"
+            elif info["site"] == "youtube" and info["duration"] > 120:
+                opts["format"] = "bv[height<=1000]+ba/b"
             elif info["duration"] > 300:
                 opts["format"] = "bv[height<=1000]+ba/b"
+            elif info["site"] == "youtube" and info["duration"] > 60:
+                opts["format"] = "bv[height<=1400]+ba/b"
+            elif info["duration"] > 120:
+                opts["format"] = "bv[height<=1400]+ba/b"
             if self.is_private():
                 msg = self.parse_info(info)
                 msg = f"正在解析\n{msg}"

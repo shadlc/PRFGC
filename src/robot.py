@@ -7,6 +7,7 @@ import logging
 import os
 import random
 import re
+import sys
 import time
 import threading
 import traceback
@@ -62,7 +63,7 @@ class Concerto:
         self.past_notice = deque(maxlen=20)
         self.past_request = deque(maxlen=20)
         self.latest_data = {}
-
+        self.loop = asyncio.new_event_loop()
         self.start_info = """
     __                           __        
    /  )                  _/_    /  )    _/_
@@ -73,8 +74,8 @@ class Concerto:
             random.choice([Fore.RED,Fore.GREEN,Fore.YELLOW,Fore.BLUE,Fore.MAGENTA,Fore.CYAN,Fore.WHITE])
             + self.start_info + Fore.RESET, flush=True)
 
-    def run(self) -> bool:
-        """尝试连接到API"""
+    def init(self) -> bool:
+        """初始化并尝试连接到API"""
         self.printf(f"正在连接API[{Fore.GREEN}{self.config.api_base}{Fore.RESET}]...", end="", console=False)
         connected = False
         while not connected:
@@ -96,7 +97,21 @@ class Concerto:
                 continue
             time.sleep(1)
         self.import_modules()
+        threading.Thread(target=self.listening_msg, daemon=True, name="消息监听").start()
+        threading.Thread(target=self.listening_console, daemon=True, name="键盘监听").start()
         return connected
+
+    async def main_loop(self):
+        """主事件循环"""
+        while self.is_running:
+            await asyncio.sleep(0.1)
+
+    def run(self) -> None:
+        """运行机器人"""
+        self.init()
+        asyncio.set_event_loop(self.loop)
+        self.loop.run_until_complete(self.main_loop())
+        sys.exit(self.is_restart)
 
     def listening_console(self):
         """监听来自终端的输入并处理"""

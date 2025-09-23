@@ -1,12 +1,9 @@
-#!/usr/bin/python
-# 机器人启动入口，由外部方法调用最佳
+"""主程序入口"""
 
-import os
-import threading
-import platform
 import logging
+import os
+import platform
 import signal
-import time
 import sys
 
 from logging.handlers import TimedRotatingFileHandler
@@ -19,8 +16,8 @@ robot = Concerto()
 if platform.system() == "Linux":
     import readline # pylint: disable=import-error
 
-    # 命令自动补全
     def completer(text, state):
+        """命令自动补全"""
         options = [cmd for cmd in robot.cmd if cmd.startswith(text)]
         if state < len(options):
             return options[state]
@@ -30,8 +27,8 @@ if platform.system() == "Linux":
     readline.parse_and_bind("tab: complete")
     readline.set_completer(completer)
 
-# 读取Ctrl C信号
-def my_handler(signum, frame):
+def my_handler(signum, frame): # pylint: disable=unused-argument
+    """捕获Ctrl C信号"""
     robot.warnf("正在关闭程序...")
     robot.is_running = False
     sys.exit()
@@ -56,8 +53,3 @@ logger.addHandler(handler)
 # 启动主函数
 if __name__ == "__main__":
     robot.run()
-    threading.Thread(target=robot.listening_msg, daemon=True, name="消息监听").start()
-    threading.Thread(target=robot.listening_console, daemon=True, name="键盘监听").start()
-    while robot.is_running:
-        time.sleep(0.1)
-    sys.exit(robot.is_restart)
