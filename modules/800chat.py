@@ -2,6 +2,7 @@
 
 import base64
 import datetime
+import html
 import io
 import os
 import re
@@ -236,24 +237,22 @@ class Chat(Module):
         if messages := self.robot.data.get("latest_recall",{}).get(self.owner_id):
             nodes = []
             for msg in messages:
-                if msg.get("time") and time.time() - msg.get("time") > 1200:
+                if msg.get("time") and time.time() - msg.get("time") > 3600:
                     continue
                 user_id = msg.get("user_id")
                 nickname = msg.get("sender",{}).get("nickname","")
-                content = msg.get("raw_message","")
+                content = html.unescape(msg.get("message",""))
                 content = re.sub(r",sub_type=\d", "", content)
                 nodes.append(self.node(content, user_id=user_id, nickname=nickname))
-            self.reply_forward(nodes, "撤回消息列表")
+            self.reply_forward(nodes, "1小时内撤回消息列表")
         else:
             self.reply("什么也没有哦~")
 
     @via(lambda self: self.at_or_private() and self.au(2) and self.match(r"^\s*\[CQ:reply,id=([^\]]+?)\]\s*$"), success=False)
     def sticker_url(self):
         """获取表情链接"""
-        msg_id = self.match(r"^\s*\[CQ:reply,id=([^\]]+?)\]\s*$").group(1)
-        reply_msg = get_msg(self.robot, msg_id)
-        msg = reply_msg.get("data",{}).get("message","")
-        if status_ok(reply_msg) and re.match(r"^\s*\[CQ:image,([^\]]+?)\]\s*$", msg):
+        msg = self.get_reply()
+        if msg and re.match(r"^\s*\[CQ:image,([^\]]+?)\]\s*$", msg):
             _, url = re.match(r"^\s*\[CQ:image,.*file=([^,\]]+?),.*url=([^,\]]+?),.*\]\s*$", msg).groups()
             msg = f"{url}"
             self.reply(msg)

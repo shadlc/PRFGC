@@ -2,9 +2,11 @@
 
 import base64
 import io
+import json
 import re
+import time
 import traceback
-from typing import Tuple
+from typing import Any, Callable, Tuple
 from urllib.parse import quote
 
 import httpx
@@ -19,6 +21,9 @@ class Picture(Module):
     HELP = {
         2: [
             "打分 | 对图片色气度进行打分",
+            "saucenao [图片] | 使用SauceNAO搜索图片",
+            "来张色图 | 调用Lolicon API获取图片",
+            "清晰术 | 调用Real-CUGAN增强图片清晰度"
         ],
     }
     GLOBAL_CONFIG = {
@@ -27,7 +32,7 @@ class Picture(Module):
     }
 
     @via(lambda self: self.au(2) and self.at_or_private()
-         and self.match(r"(打分|评分)"), success=False)
+         and self.match(r"^(\[.*\])?\s*?(打分|评分)(\[.*\])?$"), success=False)
     def nsfw(self):
         """对图片色气度进行打分"""
         api_url = "https://nsfwtag.azurewebsites.net/api/nsfw?url="
@@ -72,7 +77,7 @@ class Picture(Module):
             return self.reply("解析API响应失败", reply=True)
 
     @via(lambda self: self.au(2)
-         and self.match(r"^(s|S)auce(n|N)(a|A)(o|O)"), success=False)
+         and self.match(r"^(\[.*\])?\s*?(s|S)auce(n|N)(a|A)(o|O)"), success=False)
     def saucenao(self):
         url = ""
         if match := self.match(r"\[CQ:image,.*url=([^,\]]+?),.*\]"):
@@ -86,48 +91,49 @@ class Picture(Module):
         try:
             if not self.is_private():
                 set_emoji(self.robot, self.event.msg_id, 124)
-            self.printf("正在使用SauceNAO搜索图片...")
-            success, data = self.image_search_saucenao(url)
+            self.printf(f"正在使用SauceNAO搜索图片[{url}]...")
+            success, data = self.retry(lambda: self.image_search_saucenao(url))
             if not success:
                 return self.reply(data, reply=True)
-            self.printf(f"搜索结果:\n{data}", level="DEBUG")
             nodes = []
             for img_msg in data:
                 nodes.append(build_node(img_msg))
             if not self.is_private():
                 set_emoji(self.robot, self.event.msg_id, 66)
-            self.reply_forward(nodes, source="SauceNAO搜索成功")
+            self.reply_forward(nodes, source="SauceNAO搜索结果")
         except Exception as e:
             self.errorf(traceback.format_exc())
             self.reply(f"SauceNAO调用失败! {e}", reply=True)
 
     @via(lambda self: self.au(2) and self.at_or_private()
-         and self.match(r"^(来|发|看|给|有没有|瑟|涩|se)\S{0,5}(图|瑟|涩|se|好看|好康|可爱)"))
+         and self.match(r"^(来|发|看|给|瑟|涩|se)\S{0,5}(图|瑟|涩|se|好看|好康|可爱)的?"))
     def lolicon(self):
-        tags = ""
+        tags = []
         r18_mode = 0
         if len(self.event.text.split(" ")) > 1:
-            for tag in self.event.text.split(" ")[1:]:
-                tags += "&tag=" + tag
-        if self.config[self.owner_id]["R18"] and self.match(r"(更|超|很|再|无敌)"):
+            tags = self.event.text.split(" ")[1:]
+        if self.match(r"(更|超|很|再|无敌)"):
             r18_mode = 1
         try:
+            url = ""
             if not self.is_private():
                 set_emoji(self.robot, self.event.msg_id, 124)
-            self.printf("正在使用Lolicon API获取图片...")
-            data = self.get_lolicon_image(r18_mode, tags)
+            self.printf(f"正在使用Lolicon API获取图片...")
+            data = self.retry(lambda: self.get_lolicon_image(r18_mode, tags))
             self.printf(f"Lolicon API返回结果:\n{data}", level="DEBUG")
             if data:
-                author = f"{data["author"]}(uid:{data["uid"]})"
-                title = f"{data["title"]}(pid:{data["pid"]})"
-                url = data["urls"]["regular"]
-                if r18_mode:
-                    msg = f"来自画师{author}的作品{title}\n{url}"
+                author = f"{data["author"]}(uid: {data["uid"]})"
+                title = f"{data["title"]}(pid: {data["pid"]})"
+                url = data.get("urls", {}).get("original")
+                if data["r18"]:
+                    msg = f"来自画师{author}的作品: {title}\n(NSFW图片仅发送URL)\n{url}"
                 else:
-                    msg = f"来自画师{author}的作品{title}[CQ:image,file={url}]"
+                    msg = f"来自画师{author}的作品: {title}\n{url}"
             else:
                 msg = "未找到该标签的图片"
-            return self.reply(msg)
+            self.reply(msg)
+            if not data["r18"]:
+                self.reply(f"[CQ:image,file={url}]")
         except Exception as e:
             self.errorf(traceback.format_exc())
             self.reply(f"Lolicon API调用失败! {e}", reply=True)
@@ -186,14 +192,10 @@ class Picture(Module):
     def realCUGAN(self, img: bytes, scale: int, con: str) -> str:
         """
         Real-CUGAN增强图片清晰度
-
-        参数:
-            img (bytes): 输入的图片字节流
-            scale (int): 放大倍数（如2、3、4）
-            con (str): 增强模型的配置（如"conservative", "no-denoise"等）
-
-        返回:
-            str: 增强后的图片（Base64编码的字符串）
+        :param img: 输入的图片字节流
+        :param scale: 放大倍数（如2、3、4）
+        :param con: 增强模型的配置（如"conservative", "no-denoise"等）
+        :return: 增强后的图片（Base64编码的字符串）
         """
         try:
             predict_url = self.config.get("real_cugan_url")
@@ -214,23 +216,34 @@ class Picture(Module):
         except Exception as e:
             raise RuntimeError(f"群星之路被遮蔽，星辉无法汇聚: {str(e)}") from e
 
-    def get_lolicon_image(self, r18: int = 0, tags: str = "") -> dict | None:
+    def get_lolicon_image(self, r18: int = 0, tags: list = []) -> dict | None:
         """
         获取LoliconAPI图片
         :param r18: 是否获取R18图片
         :param tags: 需要筛选的标签
         :return: 图片链接
         """
-        url = f"https://api.lolicon.app/setu/v2?r18={r18}{quote(tags)}"
+        url = f"https://api.lolicon.app/setu/v2?r18={r18}"
+        for tag in tags:
+            url += f"&tag={quote(tag)}"
         resp = httpx.Client(timeout=5).get(url)
         data = resp.json()
         self.printf(f"调用LoliconAPI({url})返回结果：{data}", level="DEBUG")
         if data.get("data") == []:
             return None
         else:
-            return resp["data"][0]
+            img = data["data"][0]
+            if url := img.get("urls", {}).get("original"):
+                img["urls"]["original"] = url.replace("i.pixiv.re", "i.pximg.org")
+            return img
 
-    def image_search_saucenao(self, image_url: str, proxies: str = None) -> Tuple[bool, str]:
+    def image_search_saucenao(self, image_url: str, proxies: str = None) -> Tuple[bool, str | list]:
+        """
+        SauceNAO搜图
+        :param image_url: 图片URL
+        :param proxies: 代理配置
+        :return: [搜索是否成功, 搜索结果]
+        """
         saucenao_key = self.config.get("saucenao_key")
         if not saucenao_key:
             msg = "请先前往[https://saucenao.com/user.php?page=search-api]获取APIKey"
@@ -244,6 +257,7 @@ class Picture(Module):
         }
         resp = httpx.Client(timeout=10, proxy=proxies).get(saucenao_url, params=params)
         if images :=resp.json().get("results"):
+            self.printf(f"SauceNAO搜图结果:\n{json.dumps(images)}", level="DEBUG")
             msg_list = []
             for _, image in enumerate(images):
                 header = image.get("header")
@@ -252,11 +266,11 @@ class Picture(Module):
                 thumbnail = header.get("thumbnail")
                 title = data.get("title", "")
                 source = data.get("source")
-                creator = data.get("creator")
-                author = creator
+                creator = data.get("creator", "未知")
+                author = data.get("author", data.get("artist", creator))
                 if isinstance(creator, list):
                     author = ", ".join(creator)
-                if not author:
+                if data.get("member_name"):
                     author = f"{data.get("member_name")} (uid: {data.get("member_id")})"
                 msg = f"标题: {title}"
                 msg += f"\n作者: {author}"
@@ -264,7 +278,8 @@ class Picture(Module):
                 if urls := data.get("ext_urls"):
                     msg += f"\n原图地址: {urls[0]}"
                 if source:
-                    source = source.replace("i.pximg.net", "i.pximg.org")
+                    if "i.pximg.net" in source:
+                        source = re.sub(r"i\.pximg\.net.*/(\d{5,})", r"www.pixiv.net/artworks/\1", source)
                     msg += f"\n来源: {source}"
                 msg += f"\n[CQ:image,file={thumbnail}]"
                 msg_list.append(msg)
@@ -275,3 +290,20 @@ class Picture(Module):
             return False, message
         else:
             return False, "SauceNAO返回无结果~"
+
+    def retry(self, func: Callable[..., Any], name="", max_retries=3, delay=1, failed_ok=False) -> Any:
+        """多次尝试执行"""
+        for attempt in range(1, max_retries + 1):
+            try:
+                result = func()
+                return result
+            except Exception as e:
+                func_name = name if name else func.__name__
+                self.printf(f"第 {attempt} 次执行 {func_name} 失败: {e}")
+                if attempt == max_retries:
+                    if failed_ok:
+                        return None
+                    raise
+                else:
+                    self.printf(f"{delay} 秒后重试...")
+                    time.sleep(delay)

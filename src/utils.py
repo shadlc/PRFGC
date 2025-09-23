@@ -1198,7 +1198,8 @@ class Module:
         reply_msg = get_msg(self.robot, msg_id)
         if not status_ok(reply_msg):
             return
-        msg = re.sub(r"[\\\s]", "", reply_msg["data"]["message"])
+        msg =  html.unescape(reply_msg["data"]["message"])
+        msg = re.sub(r"[\\\s]", "", msg)
         return msg
 
     def printf(self, msg, end="\n", console=True, flush=False, level="INFO"):
